@@ -1,6 +1,6 @@
 import {
-  ROWS, COLS, PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START, CENTER_COL,
-  createInitialGrid, createInitialPending,
+  ROWS, COLS, PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START, CENTER_COL,
+  createInitialGrid, createInitialPending, createInitialTopPending,
   pushFromLeft, pushFromRight, pushFromTop,
   collapseGrid,
 } from './gameLogic.js';
@@ -13,6 +13,10 @@ describe('Game Constants', () => {
 
   test('pending row starts at 5 (ROWS - PENDING_SIZE)', () => {
     expect(PENDING_ROW_START).toBe(5);
+  });
+
+  test('top pending size is 6 (centered over 10 cols)', () => {
+    expect(TOP_PENDING_SIZE).toBe(6);
   });
 
   test('center column is 5', () => {
@@ -35,6 +39,12 @@ describe('Grid Initialization', () => {
   test('createInitialPending returns array of 5 tiles', () => {
     const pending = createInitialPending();
     expect(pending.length).toBe(5);
+    expect(pending.every(t => [1, 2, 3].includes(t))).toBe(true);
+  });
+
+  test('createInitialTopPending returns array of 6 tiles', () => {
+    const pending = createInitialTopPending();
+    expect(pending.length).toBe(6);
     expect(pending.every(t => [1, 2, 3].includes(t))).toBe(true);
   });
 });

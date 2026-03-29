@@ -14,9 +14,23 @@
   text-shadow: 0 0 20px rgba(100, 160, 255, 0.6);
 }
 
+.scoreboard {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+}
+
 .score {
   color: #a0a0cc;
   font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.misses {
+  color: #e05555;
+  font-size: 1.0rem;
   font-weight: 600;
   letter-spacing: 2px;
   margin: 0;
@@ -80,7 +94,18 @@
 .pending-row .tile--filled,
 .pending-col .tile--filled {
   box-shadow: 0 0 10px rgba(74, 144, 217, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-  outline: 1.5px solid rgba(255,255,255,0.15);
+}
+
+/* Slight outline on all live pending slots (filled and disabled) */
+.pending-row .tile:not(.tile--dead),
+.pending-col .tile:not(.tile--dead) {
+  outline: 1.5px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Red outline for disabled pending slots */
+.pending-row .tile--disabled,
+.pending-col .tile--disabled {
+  outline: 1.5px solid rgba(200, 80, 80, 0.85);
 }
 
 @keyframes flash-collapse {
@@ -92,6 +117,79 @@
 
 .tile--flash {
   animation: flash-collapse 320ms ease-out forwards;
+  z-index: 10;
+  position: relative;
+}
+
+.tile--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  border-radius: 8px;
+}
+
+.game-over-box {
+  background: #14142a;
+  border: 2px solid #3a3a6a;
+  border-radius: 12px;
+  padding: 36px 52px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.game-over-box h2 {
+  color: #e04040;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 5px;
+  margin: 0;
+}
+
+.game-over-box p {
+  color: #a0a0cc;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.game-over-box button {
+  background: #3a7bd5;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.game-over-box button:hover {
+  background: #4e8fe8;
+}
+
+@keyframes flash-blocked {
+  0%   { filter: brightness(1); }
+  25%  { filter: sepia(1) saturate(10) hue-rotate(310deg) brightness(1.5); }
+  65%  { filter: sepia(1) saturate(6)  hue-rotate(310deg) brightness(1.2); }
+  100% { filter: brightness(1); }
+}
+
+.tile--flash-red {
+  animation: flash-blocked 280ms ease-out forwards;
   z-index: 10;
   position: relative;
 }

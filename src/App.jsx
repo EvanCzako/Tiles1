@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useReducer, useState, useRef } from 'react'
 import {
-  ROWS, COLS, PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
-  createInitialGrid, createInitialPending,
+  ROWS, COLS, PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
+  createInitialGrid, createInitialPending, createInitialTopPending,
   pushFromLeft, pushFromRight, pushFromTop,
   collapseGrid, getTileColor, isDeadCell,
 } from './gameLogic'
@@ -39,12 +39,13 @@ function initState() {
     grid: createInitialGrid(),
     leftPending:  createInitialPending(),
     rightPending: createInitialPending(),
-    topPending:   createInitialPending(),
+    topPending:   createInitialTopPending(),
   };
 }
 
 function reducer(state, action) {
   if (action.type === 'APPLY') return { ...state, ...action.payload };
+  if (action.type === 'RESET') return initState();
   return state;
 }
 
@@ -90,14 +91,16 @@ function FlyingTile({ value, fromX, fromY, toX, toY, flyThrough = false }) {
 }
 
 // ── Static Tile ────────────────────────────────────────────────────────────
-function Tile({ value, size = CELL, flashing = false }) {
-  const { bg, text } = getTileColor(value);
+function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled = false }) {
+  const { bg, text } = disabled
+    ? { bg: '#4a1c1c', text: '#c06060' }
+    : getTileColor(value);
   return (
     <div
-      className={`tile ${value > 0 ? 'tile--filled' : ''} ${flashing ? 'tile--flash' : ''}`}
+      className={`tile ${value > 0 && !disabled ? 'tile--filled' : ''} ${flashing ? 'tile--flash' : ''} ${flashRed ? 'tile--flash-red' : ''} ${disabled ? 'tile--disabled' : ''}`}
       style={{ width: size, height: size, background: bg, color: text, fontSize: size * 0.35 }}
     >
-      {value > 0 ? value : ''}
+      {value > 0 && !disabled ? value : ''}
     </div>
   );
 }
@@ -106,15 +109,22 @@ function Tile({ value, size = CELL, flashing = false }) {
 export default function App() {
   const [state, dispatch]     = useReducer(reducer, null, initState);
   const [score, setScore]     = useState(0);
+  const [missCount, setMissCount] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [flyingTiles, setFlyingTiles] = useState([]);
   const [flyingSource, setFlyingSource] = useState(null); // 'left'|'right'|'top'|null
   const [flashSet, setFlashSet] = useState(new Set());
+  const [redFlashSet, setRedFlashSet] = useState(new Set()); // pending slot indices flashing red
+  const [redFlashSource, setRedFlashSource] = useState(null); // which pending key owns the red flash
   const [collapsingCells, setCollapsingCells] = useState(new Set());
+  const [disabledLeft, setDisabledLeft]   = useState(new Set());
+  const [disabledRight, setDisabledRight] = useState(new Set());
+  const [disabledTop, setDisabledTop]     = useState(new Set());
+  const [gameOver, setGameOver]           = useState(false);
   const pendingCommit = useRef(null); // stores { payload, mergedCells, pushScore }
 
   const handleKey = useCallback((e) => {
-    if (animating) return;
+    if (animating || gameOver) return;
 
     let pushFn, pendingArg, pendingKey, getPendingPos;
 
@@ -133,14 +143,27 @@ export default function App() {
 
     e.preventDefault();
 
-    const result = pushFn(state.grid, pendingArg);
-    const { landings, mergedCells, score: pushScore } = result;
+    const disabled = pendingKey === 'leftPending' ? disabledLeft
+                   : pendingKey === 'rightPending' ? disabledRight
+                   : disabledTop;
+    const filteredPending = pendingArg.map((v, i) => disabled.has(i) ? 0 : v);
+
+    const result = pushFn(state.grid, filteredPending);
+    const { landings, mergedCells, score: pushScore, blockedIndices } = result;
+
+    if (blockedIndices.length > 0) {
+      setMissCount(prev => prev + blockedIndices.length);
+      setRedFlashSet(new Set(blockedIndices));
+      setRedFlashSource(pendingKey);
+    }
 
     // Store state to commit after animation
     pendingCommit.current = {
       payload: { grid: result.grid, [pendingKey]: result.pending },
       mergedCells,
       pushScore,
+      blockedIndices,
+      pendingKey,
     };
 
     // Build flying tile list from landings
@@ -169,6 +192,20 @@ export default function App() {
     if (flying.length === 0) {
       // Nothing landed — commit immediately, no animation
       dispatch({ type: 'APPLY', payload: pendingCommit.current.payload });
+      const newDL = pendingKey === 'leftPending'  ? new Set([...disabledLeft,  ...blockedIndices]) : disabledLeft;
+      const newDR = pendingKey === 'rightPending' ? new Set([...disabledRight, ...blockedIndices]) : disabledRight;
+      const newDT = pendingKey === 'topPending'   ? new Set([...disabledTop,   ...blockedIndices]) : disabledTop;
+      if (blockedIndices.length > 0) {
+        if (pendingKey === 'leftPending')  setDisabledLeft(newDL);
+        if (pendingKey === 'rightPending') setDisabledRight(newDR);
+        if (pendingKey === 'topPending')   setDisabledTop(newDT);
+        setTimeout(() => { setRedFlashSet(new Set()); setRedFlashSource(null); }, FLASH_MS);
+      }
+      const g0 = pendingCommit.current.payload.grid;
+      const rowAct0 = i => g0[PENDING_ROW_START + i].some(v => v !== 0);
+      if (Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct0(i) || newDL.has(i)) &&
+          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct0(i) || newDR.has(i)) &&
+          Array.from({length: TOP_PENDING_SIZE}, (_, i) => i).every(i => newDT.has(i))) setGameOver(true);
       return;
     }
 
@@ -178,7 +215,7 @@ export default function App() {
     setAnimating(true);
 
     setTimeout(() => {
-      const { payload, mergedCells, pushScore } = pendingCommit.current;
+      const { payload, mergedCells, pushScore, blockedIndices: blocked, pendingKey: pKey } = pendingCommit.current;
 
       // Update score
       setScore(prev => prev + pushScore);
@@ -190,15 +227,38 @@ export default function App() {
         setTimeout(() => setFlashSet(new Set()), FLASH_MS);
       }
 
+      // Update disabled sets for any newly blocked tiles
+      const newDL = pKey === 'leftPending'  ? new Set([...disabledLeft,  ...blocked]) : disabledLeft;
+      const newDR = pKey === 'rightPending' ? new Set([...disabledRight, ...blocked]) : disabledRight;
+      const newDT = pKey === 'topPending'   ? new Set([...disabledTop,   ...blocked]) : disabledTop;
+      if (blocked.length > 0) {
+        if (pKey === 'leftPending')  setDisabledLeft(newDL);
+        if (pKey === 'rightPending') setDisabledRight(newDR);
+        if (pKey === 'topPending')   setDisabledTop(newDT);
+      }
+
       // Clear push animation artifacts
       setFlyingTiles([]);
       setFlyingSource(null);
+      setRedFlashSet(new Set());
+      setRedFlashSource(null);
 
       // Check for collapses in the post-push grid
       const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
 
+      // Helper: check game-over given the final settled grid and updated disabled sets
+      const isGameOver = (finalGrid) => {
+        const rowAct = i => finalGrid[PENDING_ROW_START + i].some(v => v !== 0);
+        return (
+          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct(i) || newDL.has(i)) &&
+          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct(i) || newDR.has(i)) &&
+          Array.from({length: TOP_PENDING_SIZE}, (_, i) => i).every(i => newDT.has(i))
+        );
+      };
+
       if (moves.length === 0) {
         dispatch({ type: 'APPLY', payload });
+        if (isGameOver(payload.grid)) setGameOver(true);
         setAnimating(false);
         return;
       }
@@ -221,26 +281,58 @@ export default function App() {
           dispatch({ type: 'APPLY', payload: { grid: collapsedGrid } });
           setFlyingTiles([]);
           setCollapsingCells(new Set());
+          if (isGameOver(collapsedGrid)) setGameOver(true);
           setAnimating(false);
         }, ANIM_MS + 30);
       }));
     }, ANIM_MS + 30);
 
-  }, [animating, state]);
+  }, [animating, state, gameOver, disabledLeft, disabledRight, disabledTop]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
+  const handleRestart = useCallback(() => {
+    dispatch({ type: 'RESET' });
+    setScore(0);
+    setMissCount(0);
+    setAnimating(false);
+    setFlyingTiles([]);
+    setFlyingSource(null);
+    setFlashSet(new Set());
+    setRedFlashSet(new Set());
+    setRedFlashSource(null);
+    setCollapsingCells(new Set());
+    setDisabledLeft(new Set());
+    setDisabledRight(new Set());
+    setDisabledTop(new Set());
+    setGameOver(false);
+    pendingCommit.current = null;
+  }, []);
+
   const { grid, leftPending, rightPending, topPending } = state;
 
   return (
     <div className="app">
       <h1 className="title">TILES</h1>
-      <p className="score">Score: {score}</p>
+      <div className="scoreboard">
+        <p className="score">Score: {score}</p>
+        <p className="misses">Misses: {missCount}</p>
+      </div>
       <p className="hint">← → push tiles in &nbsp;|&nbsp; ↓ drop from top</p>
       <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H }}>
+
+        {gameOver && (
+          <div className="game-over-overlay">
+            <div className="game-over-box">
+              <h2>GAME OVER</h2>
+              <p>Score: {score}</p>
+              <button onClick={handleRestart}>Play Again</button>
+            </div>
+          </div>
+        )}
 
         {/* Flying tile overlays */}
         {flyingTiles.map(ft => (
@@ -255,17 +347,31 @@ export default function App() {
 
         {/* Top pending row */}
         <div className="pending-row" style={{ left: sideOffset + topPendingLeft, top: 0 }}>
-          {topPending.map((val, i) => (
-            <Tile key={i} value={flyingSource === 'top' ? 0 : val} />
-          ))}
+          {topPending.map((val, i) => {
+            const isDisabled = disabledTop.has(i);
+            const isBlocked  = redFlashSource === 'topPending' && redFlashSet.has(i);
+            return (
+              <Tile key={i}
+                value={flyingSource === 'top' && !isBlocked && !isDisabled ? 0 : val}
+                flashRed={isBlocked}
+                disabled={isDisabled}
+              />
+            );
+          })}
         </div>
 
         {/* Left pending column */}
         <div className="pending-col" style={{ left: 0, top: pendingColTop }}>
           {leftPending.map((val, i) => {
-            const rowActive = grid[PENDING_ROW_START + i].some(v => v !== 0);
+            const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+            const isDisabled = disabledLeft.has(i);
+            const isBlocked  = redFlashSource === 'leftPending' && redFlashSet.has(i);
             return rowActive
-              ? <Tile key={i} value={flyingSource === 'left' ? 0 : val} />
+              ? <Tile key={i}
+                  value={flyingSource === 'left' && !isBlocked && !isDisabled ? 0 : val}
+                  flashRed={isBlocked}
+                  disabled={isDisabled}
+                />
               : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
           })}
         </div>
@@ -288,9 +394,15 @@ export default function App() {
         {/* Right pending column */}
         <div className="pending-col" style={{ left: sideOffset + gridPx + GAP * 4, top: pendingColTop }}>
           {rightPending.map((val, i) => {
-            const rowActive = grid[PENDING_ROW_START + i].some(v => v !== 0);
+            const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+            const isDisabled = disabledRight.has(i);
+            const isBlocked  = redFlashSource === 'rightPending' && redFlashSet.has(i);
             return rowActive
-              ? <Tile key={i} value={flyingSource === 'right' ? 0 : val} />
+              ? <Tile key={i}
+                  value={flyingSource === 'right' && !isBlocked && !isDisabled ? 0 : val}
+                  flashRed={isBlocked}
+                  disabled={isDisabled}
+                />
               : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
           })}
         </div>

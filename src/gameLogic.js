@@ -1,9 +1,10 @@
 export const ROWS = 10;
 export const COLS = 10;
-export const PENDING_SIZE = 5;
+export const PENDING_SIZE = 5;          // side panels: 5 slots
+export const TOP_PENDING_SIZE = 6;      // top row: 6 tiles (cols 2-7), centered
 
 export const PENDING_ROW_START = ROWS - PENDING_SIZE; // 5
-export const PENDING_COL_START = 2; // cols 2-6
+export const PENDING_COL_START = 2; // cols 2-7 for top, 2-6 for sides
 export const CENTER_COL = Math.floor(COLS / 2); // 5
 
 export function createInitialGrid() {
@@ -26,6 +27,10 @@ export function createInitialPending() {
   return Array.from({ length: PENDING_SIZE }, randTile);
 }
 
+export function createInitialTopPending() {
+  return Array.from({ length: TOP_PENDING_SIZE }, randTile);
+}
+
 // Returns the result of a moving tile hitting a stationary tile.
 // equal → annihilate (0), moving < stationary → stationary - moving, moving > stationary → no collision (null)
 function collide(moving, stationary) {
@@ -42,6 +47,7 @@ export function pushFromLeft(grid, leftPending) {
   const newPending = [...leftPending];
   const mergedCells = [];
   const landings = [];
+  const blockedIndices = [];
   let score = 0;
 
   // Find per-row leftmost tiles and overall structure left face
@@ -82,13 +88,17 @@ export function pushFromLeft(grid, leftPending) {
       } else if (leftmost > 0) {
         newGrid[row][leftmost - 1] = tileVal;
         landings.push({ pendingIdx: i, row, col: leftmost - 1, merged: false });
+      } else {
+        // col 0 is occupied and tile is larger — no room to enter
+        blockedIndices.push(i);
+        continue; // preserve original tile value; don't replace with new random
       }
     }
 
     newPending[i] = randTile();
   }
 
-  return { grid: newGrid, pending: newPending, mergedCells, landings, score };
+  return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
 export function pushFromRight(grid, rightPending) {
@@ -96,6 +106,7 @@ export function pushFromRight(grid, rightPending) {
   const newPending = [...rightPending];
   const mergedCells = [];
   const landings = [];
+  const blockedIndices = [];
   let score = 0;
 
   // Find per-row rightmost tiles and overall structure right face
@@ -136,13 +147,17 @@ export function pushFromRight(grid, rightPending) {
       } else if (rightmost < COLS - 1) {
         newGrid[row][rightmost + 1] = tileVal;
         landings.push({ pendingIdx: i, row, col: rightmost + 1, merged: false });
+      } else {
+        // col COLS-1 is occupied and tile is larger — no room to enter
+        blockedIndices.push(i);
+        continue; // preserve original tile value; don't replace with new random
       }
     }
 
     newPending[i] = randTile();
   }
 
-  return { grid: newGrid, pending: newPending, mergedCells, landings, score };
+  return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
 export function pushFromTop(grid, topPending) {
@@ -150,9 +165,10 @@ export function pushFromTop(grid, topPending) {
   const newPending = [...topPending];
   const mergedCells = [];
   const landings = [];
+  const blockedIndices = [];
   let score = 0;
 
-  for (let i = 0; i < PENDING_SIZE; i++) {
+  for (let i = 0; i < newPending.length; i++) {
     const col = PENDING_COL_START + i;
     const tileVal = newPending[i];
     if (tileVal === 0) continue;
@@ -183,13 +199,17 @@ export function pushFromTop(grid, topPending) {
       } else if (topmost > 0) {
         newGrid[topmost - 1][col] = tileVal;
         landings.push({ pendingIdx: i, row: topmost - 1, col, merged: false });
+      } else {
+        // row 0 is occupied and tile is larger — no room to enter
+        blockedIndices.push(i);
+        continue; // preserve original tile value; don't replace with new random
       }
     }
 
     newPending[i] = randTile();
   }
 
-  return { grid: newGrid, pending: newPending, mergedCells, landings, score };
+  return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
 // Returns { grid, moves } where moves = [{ value, fromRow, fromCol, toRow, toCol }]
