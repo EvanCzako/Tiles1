@@ -15,12 +15,13 @@ export function createInitialGrid() {
   return grid;
 }
 
-// Weights: 1→3, 2→2, 3→1  (out of 6)
 function randTile() {
-  const r = Math.random() * 9;
-  if (r < 3) return 1;
-  if (r < 6) return 2;
-  return 3;
+  const r = Math.random() * 21;
+  if (r < 6) return 1;
+  if (r < 12) return 2;
+	if (r < 18) return 3;
+	if (r < 20) return 4;
+  return 5;
 }
 
 export function createInitialPending() {
