@@ -17,10 +17,10 @@ export function createInitialGrid() {
 
 function randTile() {
   const r = Math.random() * 21;
-  if (r < 6) return 1;
+  if (r < 6)  return 1;
   if (r < 12) return 2;
-	if (r < 18) return 3;
-	if (r < 20) return 4;
+  if (r < 18) return 3;
+  if (r < 20) return 4;
   return 5;
 }
 
@@ -32,16 +32,11 @@ export function createInitialTopPending() {
   return Array.from({ length: TOP_PENDING_SIZE }, randTile);
 }
 
-// Returns the result of a moving tile hitting a stationary tile.
-// equal → annihilate (0), moving < stationary → stationary - moving, moving > stationary → no collision (null)
 function collide(moving, stationary) {
   if (moving === stationary) return 0;
   if (moving < stationary) return stationary - moving;
-  return null; // moving > stationary: stick adjacent instead
+  return null;
 }
-
-// Each push returns { grid, pending, mergedCells, landings, score }
-// landing: { pendingIdx, row, col, merged }
 
 export function pushFromLeft(grid, leftPending) {
   const newGrid = grid.map(row => [...row]);
@@ -51,9 +46,7 @@ export function pushFromLeft(grid, leftPending) {
   const blockedIndices = [];
   let score = 0;
 
-  // Find per-row leftmost tiles and overall structure left face
   const rowLeftmost = [];
-  let structureLeft = COLS;
   for (let i = 0; i < PENDING_SIZE; i++) {
     const row = PENDING_ROW_START + i;
     let leftmost = -1;
@@ -61,8 +54,8 @@ export function pushFromLeft(grid, leftPending) {
       if (newGrid[row][c] !== 0) { leftmost = c; break; }
     }
     rowLeftmost.push(leftmost);
-    if (leftmost !== -1) structureLeft = Math.min(structureLeft, leftmost);
   }
+
   for (let i = 0; i < PENDING_SIZE; i++) {
     const row = PENDING_ROW_START + i;
     const tileVal = newPending[i];
@@ -71,18 +64,11 @@ export function pushFromLeft(grid, leftPending) {
     const leftmost = rowLeftmost[i];
 
     if (leftmost === -1) {
-      // Empty row — fly through, don't place
       landings.push({ pendingIdx: i, flyThrough: true });
     } else {
       const result = collide(tileVal, newGrid[row][leftmost]);
       if (result !== null) {
-        if (result === 0) {
-          // Annihilation
-          score += tileVal + newGrid[row][leftmost];
-        } else {
-          // Subtraction
-          score += tileVal;
-        }
+        score += result === 0 ? tileVal + newGrid[row][leftmost] : tileVal;
         newGrid[row][leftmost] = result;
         mergedCells.push([row, leftmost]);
         landings.push({ pendingIdx: i, row, col: leftmost, merged: true });
@@ -90,9 +76,8 @@ export function pushFromLeft(grid, leftPending) {
         newGrid[row][leftmost - 1] = tileVal;
         landings.push({ pendingIdx: i, row, col: leftmost - 1, merged: false });
       } else {
-        // col 0 is occupied and tile is larger — no room to enter
         blockedIndices.push(i);
-        continue; // preserve original tile value; don't replace with new random
+        continue;
       }
     }
 
@@ -110,9 +95,7 @@ export function pushFromRight(grid, rightPending) {
   const blockedIndices = [];
   let score = 0;
 
-  // Find per-row rightmost tiles and overall structure right face
   const rowRightmost = [];
-  let structureRight = -1;
   for (let i = 0; i < PENDING_SIZE; i++) {
     const row = PENDING_ROW_START + i;
     let rightmost = -1;
@@ -120,8 +103,8 @@ export function pushFromRight(grid, rightPending) {
       if (newGrid[row][c] !== 0) { rightmost = c; break; }
     }
     rowRightmost.push(rightmost);
-    if (rightmost !== -1) structureRight = Math.max(structureRight, rightmost);
   }
+
   for (let i = 0; i < PENDING_SIZE; i++) {
     const row = PENDING_ROW_START + i;
     const tileVal = newPending[i];
@@ -130,18 +113,11 @@ export function pushFromRight(grid, rightPending) {
     const rightmost = rowRightmost[i];
 
     if (rightmost === -1) {
-      // Empty row — fly through, don't place
       landings.push({ pendingIdx: i, flyThrough: true });
     } else {
       const result = collide(tileVal, newGrid[row][rightmost]);
       if (result !== null) {
-        if (result === 0) {
-          // Annihilation
-          score += tileVal + newGrid[row][rightmost];
-        } else {
-          // Subtraction
-          score += tileVal;
-        }
+        score += result === 0 ? tileVal + newGrid[row][rightmost] : tileVal;
         newGrid[row][rightmost] = result;
         mergedCells.push([row, rightmost]);
         landings.push({ pendingIdx: i, row, col: rightmost, merged: true });
@@ -149,9 +125,8 @@ export function pushFromRight(grid, rightPending) {
         newGrid[row][rightmost + 1] = tileVal;
         landings.push({ pendingIdx: i, row, col: rightmost + 1, merged: false });
       } else {
-        // col COLS-1 is occupied and tile is larger — no room to enter
         blockedIndices.push(i);
-        continue; // preserve original tile value; don't replace with new random
+        continue;
       }
     }
 
@@ -174,26 +149,18 @@ export function pushFromTop(grid, topPending) {
     const tileVal = newPending[i];
     if (tileVal === 0) continue;
 
-    // Find topmost occupied row
     let topmost = -1;
     for (let r = 0; r < ROWS; r++) {
       if (newGrid[r][col] !== 0) { topmost = r; break; }
     }
 
     if (topmost === -1) {
-      // Empty column — land at bottom row, no fly-through
       newGrid[ROWS - 1][col] = tileVal;
       landings.push({ pendingIdx: i, row: ROWS - 1, col, merged: false });
     } else {
       const result = collide(tileVal, newGrid[topmost][col]);
       if (result !== null) {
-        if (result === 0) {
-          // Annihilation
-          score += tileVal + newGrid[topmost][col];
-        } else {
-          // Subtraction
-          score += tileVal;
-        }
+        score += result === 0 ? tileVal + newGrid[topmost][col] : tileVal;
         newGrid[topmost][col] = result;
         mergedCells.push([topmost, col]);
         landings.push({ pendingIdx: i, row: topmost, col, merged: true });
@@ -201,9 +168,8 @@ export function pushFromTop(grid, topPending) {
         newGrid[topmost - 1][col] = tileVal;
         landings.push({ pendingIdx: i, row: topmost - 1, col, merged: false });
       } else {
-        // row 0 is occupied and tile is larger — no room to enter
         blockedIndices.push(i);
-        continue; // preserve original tile value; don't replace with new random
+        continue;
       }
     }
 
@@ -213,9 +179,6 @@ export function pushFromTop(grid, topPending) {
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
-// Returns { grid, moves } where moves = [{ value, fromRow, fromCol, toRow, toCol }]
-// Each iteration: gravity (columns fall down), then each row's halves pack toward center.
-// Repeats until stable.
 export function collapseGrid(grid) {
   const newGrid = grid.map(row => [...row]);
   const allMoves = [];
@@ -223,7 +186,6 @@ export function collapseGrid(grid) {
   while (true) {
     const moves = [];
 
-    // ── Gravity: pack each column downward ──────────────────────────────────
     for (let c = 0; c < COLS; c++) {
       const tiles = [];
       for (let r = 0; r < ROWS; r++) {
@@ -243,12 +205,9 @@ export function collapseGrid(grid) {
       }
     }
 
-    // ── Horizontal: each row's halves pack toward center ─────────────────────
-    // Uses a snapshot so left-half and right-half reads are independent per row.
     for (let r = 0; r < ROWS; r++) {
       const rowSnapshot = [...newGrid[r]];
 
-      // Left half (cols 0…CENTER_COL-1): pack rightward toward center
       {
         const tiles = [];
         for (let c = 0; c < CENTER_COL; c++) {
@@ -268,7 +227,6 @@ export function collapseGrid(grid) {
         }
       }
 
-      // Right half (cols CENTER_COL…COLS-1): pack leftward toward center
       {
         const tiles = [];
         for (let c = CENTER_COL; c < COLS; c++) {

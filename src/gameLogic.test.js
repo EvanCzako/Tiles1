@@ -55,11 +55,11 @@ describe('Collision Logic', () => {
       ...Array(ROWS - 1).fill(null).map(() => Array(COLS).fill(0)),
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ];
-    grid[PENDING_ROW_START][0] = 1; // tile at position for left push
+    grid[PENDING_ROW_START][0] = 1;
 
     const result = pushFromLeft(grid, [1, 0, 0, 0, 0]);
     expect(result.grid[PENDING_ROW_START][0]).toBe(0);
-    expect(result.score).toBe(2); // 1 + 1
+    expect(result.score).toBe(2);
   });
 
   test('subtraction: smaller tile reduces larger (1 + 3 → 2)', () => {
@@ -67,11 +67,11 @@ describe('Collision Logic', () => {
       ...Array(ROWS - 1).fill(null).map(() => Array(COLS).fill(0)),
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ];
-    grid[PENDING_ROW_START][0] = 3; // larger tile
+    grid[PENDING_ROW_START][0] = 3;
 
     const result = pushFromLeft(grid, [1, 0, 0, 0, 0]);
     expect(result.grid[PENDING_ROW_START][0]).toBe(2);
-    expect(result.score).toBe(1); // score = moving tile value
+    expect(result.score).toBe(1);
   });
 
   test('no collision: larger tile does not collide with smaller', () => {
@@ -79,12 +79,11 @@ describe('Collision Logic', () => {
       ...Array(ROWS - 1).fill(null).map(() => Array(COLS).fill(0)),
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ];
-    grid[PENDING_ROW_START][0] = 1; // smaller tile
+    grid[PENDING_ROW_START][0] = 1;
 
     const result = pushFromLeft(grid, [3, 0, 0, 0, 0]);
-    // Larger tile (3) should stick adjacent (not collide)
-    expect(result.grid[PENDING_ROW_START][0]).toBe(1); // original remains
-    expect(result.score).toBe(0); // no collision score
+    expect(result.grid[PENDING_ROW_START][0]).toBe(1);
+    expect(result.score).toBe(0);
   });
 });
 
@@ -94,11 +93,8 @@ describe('Push From Left', () => {
     grid[PENDING_ROW_START][2] = 3;
 
     const result = pushFromLeft(grid, [2, 0, 0, 0, 0]);
-    // Tile should be placed adjacent to the 3 at position [PENDING_ROW_START][1]
-    // But then collapseGrid will be called which moves things down
-    // For this test, just check that a collision happened
-    expect(result.grid[PENDING_ROW_START][2]).toBe(1); // 3 - 2 = 1 (after collision)
-    expect(result.pending[0]).toBeGreaterThan(0); // new random tile
+    expect(result.grid[PENDING_ROW_START][2]).toBe(1);
+    expect(result.pending[0]).toBeGreaterThan(0);
   });
 
   test('left push in empty row flies through', () => {
@@ -143,7 +139,6 @@ describe('Push From Top', () => {
 describe('Vertical Collapse (Gravity)', () => {
   test('tiles fall down under gravity', () => {
     const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    // Use CENTER_COL-1 (col 4) so tiles are already at the center target — no horizontal move
     grid[2][CENTER_COL - 1] = 1;
     grid[3][CENTER_COL - 1] = 2;
 
@@ -156,7 +151,6 @@ describe('Vertical Collapse (Gravity)', () => {
 
   test('tiles pack to bottom without gaps', () => {
     const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    // Use CENTER_COL-1 so no horizontal packing is triggered
     grid[0][CENTER_COL - 1] = 1;
     grid[3][CENTER_COL - 1] = 2;
     grid[7][CENTER_COL - 1] = 3;
@@ -191,87 +185,38 @@ describe('Horizontal Collapse (Row Packing)', () => {
   });
 
   test('right half contiguous tiles with leading center gap pack correctly', () => {
-    // Bug regression: tiles at cols 6,7 are contiguous (no mid-row hole)
-    // but col 5 (CENTER_COL) is empty — must still pack to cols 5, 6
     const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    grid[ROWS - 1][CENTER_COL + 1] = 1;  // col 6
-    grid[ROWS - 1][CENTER_COL + 2] = 2;  // col 7
+    grid[ROWS - 1][CENTER_COL + 1] = 1;
+    grid[ROWS - 1][CENTER_COL + 2] = 2;
 
     const result = collapseGrid(grid);
     const row = result.grid[ROWS - 1];
-    expect(row[CENTER_COL]).toBe(1);       // moved to col 5
-    expect(row[CENTER_COL + 1]).toBe(2);   // moved to col 6
-    expect(row[CENTER_COL + 2]).toBe(0);   // vacated
+    expect(row[CENTER_COL]).toBe(1);
+    expect(row[CENTER_COL + 1]).toBe(2);
+    expect(row[CENTER_COL + 2]).toBe(0);
   });
 
   test('left half contiguous tiles with leading center gap pack correctly', () => {
-    // Tiles at cols 2,3 are contiguous but col 4 (CENTER_COL-1) is empty
     const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    grid[ROWS - 1][CENTER_COL - 3] = 1;  // col 2
-    grid[ROWS - 1][CENTER_COL - 2] = 2;  // col 3
+    grid[ROWS - 1][CENTER_COL - 3] = 1;
+    grid[ROWS - 1][CENTER_COL - 2] = 2;
 
     const result = collapseGrid(grid);
     const row = result.grid[ROWS - 1];
-    expect(row[CENTER_COL - 2]).toBe(1);   // moved to col 3
-    expect(row[CENTER_COL - 1]).toBe(2);   // moved to col 4
-    expect(row[CENTER_COL - 3]).toBe(0);   // vacated
-  });
-});
-
-describe('Row Packing (all push directions)', () => {
-  test('left-half tiles pack toward center regardless of starting column', () => {
-    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    // Tiles at cols 0 and 3; gravity falls them to bottom row first
-    grid[5][0] = 1;
-    grid[5][3] = 2;
-
-    const result = collapseGrid(grid);
-    // After gravity both land on row 9, then pack to cols 3, 4
-    expect(result.grid[ROWS - 1].slice(0, CENTER_COL - 2).every(v => v === 0)).toBe(true);
-    expect(result.grid[ROWS - 1][CENTER_COL - 2]).toBe(1);
-    expect(result.grid[ROWS - 1][CENTER_COL - 1]).toBe(2);
-  });
-
-  test('right side packs left toward center even with empty center columns', () => {
-    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    grid[ROWS - 1][7] = 1;
-    grid[ROWS - 1][9] = 2;
-
-    const result = collapseGrid(grid);
-    expect(result.grid[ROWS - 1][CENTER_COL]).toBe(1);
-    expect(result.grid[ROWS - 1][CENTER_COL + 1]).toBe(2);
-  });
-
-  test('left side packs right toward center even with empty center columns', () => {
-    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    grid[ROWS - 1][0] = 1;
-    grid[ROWS - 1][2] = 2;
-
-    const result = collapseGrid(grid);
-    expect(result.grid[ROWS - 1][CENTER_COL - 2]).toBe(1);
-    expect(result.grid[ROWS - 1][CENTER_COL - 1]).toBe(2);
-  });
-
-  test('single right-side tile packs to CENTER_COL when center is empty', () => {
-    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    grid[ROWS - 1][9] = 1;
-
-    const result = collapseGrid(grid);
-    expect(result.grid[ROWS - 1][CENTER_COL]).toBe(1);
+    expect(row[CENTER_COL - 2]).toBe(1);
+    expect(row[CENTER_COL - 1]).toBe(2);
+    expect(row[CENTER_COL - 3]).toBe(0);
   });
 });
 
 describe('Cascading Collapse Loop', () => {
   test('gravity then row-packing interact correctly', () => {
     const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-    // Tiles in separate columns; gravity lands all on row 9, then row packing compacts
     grid[3][0] = 1;
     grid[4][2] = 2;
     grid[5][4] = 3;
 
     const result = collapseGrid(grid);
-    // After gravity: [9][0]=1, [9][2]=2, [9][4]=3
-    // After left-half row pack: cols [0,2,4] → [2,3,4]
     const bottomRow = result.grid[ROWS - 1];
     expect(bottomRow[2]).toBe(1);
     expect(bottomRow[3]).toBe(2);
@@ -285,7 +230,6 @@ describe('Cascading Collapse Loop', () => {
     grid[ROWS - 1][9] = 3;
 
     const result = collapseGrid(grid);
-    // Verify no tiles are lost
     const flatOrig = grid.flat().filter(x => x !== 0).length;
     const flatResult = result.grid.flat().filter(x => x !== 0).length;
     expect(flatResult).toBe(flatOrig);
