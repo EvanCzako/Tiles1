@@ -157,7 +157,7 @@ export default function App() {
           : '← → push tiles in  ·  ↓ drop from top'}
       </p>
       <div className="arena-container">
-        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, marginTop: Math.max(0, window.innerHeight - HEADER_H - CONTAINER_H * scale) / 4 }}>
+        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0 }}>
           <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
 
             {gameOver && (

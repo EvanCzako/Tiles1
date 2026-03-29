@@ -99,7 +99,6 @@ html, body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  transition: background 0.12s ease;
   flex-shrink: 0;
 }
 
