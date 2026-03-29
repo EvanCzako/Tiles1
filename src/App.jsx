@@ -105,12 +105,13 @@ function Tile({ value, size = CELL, flashing = false }) {
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [state, dispatch]     = useReducer(reducer, null, initState);
+  const [score, setScore]     = useState(0);
   const [animating, setAnimating] = useState(false);
   const [flyingTiles, setFlyingTiles] = useState([]);
   const [flyingSource, setFlyingSource] = useState(null); // 'left'|'right'|'top'|null
   const [flashSet, setFlashSet] = useState(new Set());
   const [collapsingCells, setCollapsingCells] = useState(new Set());
-  const pendingCommit = useRef(null); // stores { payload, mergedCells }
+  const pendingCommit = useRef(null); // stores { payload, mergedCells, pushScore }
 
   const handleKey = useCallback((e) => {
     if (animating) return;
@@ -133,12 +134,13 @@ export default function App() {
     e.preventDefault();
 
     const result = pushFn(state.grid, pendingArg);
-    const { landings, mergedCells } = result;
+    const { landings, mergedCells, score: pushScore } = result;
 
     // Store state to commit after animation
     pendingCommit.current = {
       payload: { grid: result.grid, [pendingKey]: result.pending },
       mergedCells,
+      pushScore,
     };
 
     // Build flying tile list from landings
@@ -176,7 +178,10 @@ export default function App() {
     setAnimating(true);
 
     setTimeout(() => {
-      const { payload, mergedCells } = pendingCommit.current;
+      const { payload, mergedCells, pushScore } = pendingCommit.current;
+
+      // Update score
+      setScore(prev => prev + pushScore);
 
       // Flash merged cells
       if (mergedCells.length > 0) {
@@ -190,7 +195,7 @@ export default function App() {
       setFlyingSource(null);
 
       // Check for collapses in the post-push grid
-      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid, sourceKey);
+      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
 
       if (moves.length === 0) {
         dispatch({ type: 'APPLY', payload });
@@ -233,6 +238,7 @@ export default function App() {
   return (
     <div className="app">
       <h1 className="title">TILES</h1>
+      <p className="score">Score: {score}</p>
       <p className="hint">← → push tiles in &nbsp;|&nbsp; ↓ drop from top</p>
       <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H }}>
 

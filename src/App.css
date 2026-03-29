@@ -14,6 +14,14 @@
   text-shadow: 0 0 20px rgba(100, 160, 255, 0.6);
 }
 
+.score {
+  color: #a0a0cc;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
 .hint {
   color: #8888aa;
   font-size: 0.85rem;
