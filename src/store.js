@@ -11,7 +11,7 @@ export const GAP  = 4;
 
 export const sideOffset     = CELL + GAP * 4;
 export const gridPx         = COLS * CELL + (COLS - 1) * GAP;
-export const gridTopOffset  = 3 * (CELL + GAP);
+export const gridTopOffset  = CELL + GAP * 4;
 const        gridBottom     = gridTopOffset + ROWS * (CELL + GAP) - GAP;
 export const pendingColTop  = gridBottom - PENDING_SIZE * (CELL + GAP) + GAP;
 export const topPendingLeft = PENDING_COL_START * (CELL + GAP);
@@ -45,7 +45,6 @@ function initState() {
     rightPending:   createInitialPending(),
     topPending:     createInitialTopPending(),
     score:          0,
-    missCount:      0,
     gameOver:       false,
     animating:      false,
     flyingTiles:    [],
@@ -133,7 +132,6 @@ const useGameStore = create((set, get) => ({
         disabledLeft:  newDL,
         disabledRight: newDR,
         disabledTop:   newDT,
-        missCount:      blockedIndices.length > 0 ? s.missCount + blockedIndices.length : s.missCount,
         redFlashSet:    blockedIndices.length > 0 ? new Set(blockedIndices) : new Set(),
         redFlashSource: blockedIndices.length > 0 ? pendingKey : null,
       });

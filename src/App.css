@@ -40,22 +40,9 @@ html, body {
   margin: 0;
 }
 
-.scoreboard {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-}
-
 .score {
   color: #a0a0cc;
   font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.misses {
-  color: #e05555;
-  font-size: 1rem;
   font-weight: 600;
   margin: 0;
 }
@@ -187,4 +174,51 @@ html, body {
   animation: flash-blocked 280ms ease-out forwards;
   z-index: 10;
   position: relative;
+}
+
+/* ── Normal layout: header children participate directly in .app's flex column */
+.game-header {
+  display: contents;
+}
+
+.swipe-zone {
+  display: none;
+}
+
+/* ── Small landscape (phone on its side) ──────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app {
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+  }
+
+  .game-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 10px;
+    width: 100px;
+    flex-shrink: 0;
+    align-self: stretch;
+  }
+
+  .swipe-zone {
+    display: block;
+    width: 100px;
+    flex-shrink: 0;
+  }
+
+  .title {
+    font-size: 1.3rem;
+  }
+
+  .score {
+    font-size: 0.9rem;
+  }
+
+  .hint {
+    font-size: 0.7rem;
+  }
 }

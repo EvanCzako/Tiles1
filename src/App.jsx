@@ -6,10 +6,10 @@ import useGameStore, {
 import { PENDING_ROW_START, isDeadCell, getTileColor } from './gameLogic'
 import './App.css'
 
-// Height consumed by title + scoreboard + hint + gaps + app padding (both sides).
-// Used to compute available arena height from window.innerHeight without
-// measuring DOM elements (avoids BoundingClientRect race conditions on resize).
+// Vertical space consumed by title + score + hint + gaps + app padding in portrait/desktop.
 const HEADER_H = 140;
+// Width of the left label panel and right swipe zone in small landscape mode.
+const LANDSCAPE_PANEL_W = 100;
 
 const isTouch = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -68,8 +68,12 @@ function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled
 
 // ── Scale calculation (pure — no DOM measurement) ───────────────────────────
 function computeScale() {
-  const availW = window.innerWidth  - 32;       // 16px padding each side
-  const availH = window.innerHeight - HEADER_H;
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  // Small landscape = phone on its side (not a tablet)
+  const smallLandscape = vw > vh && vh <= 500;
+  const availW = vw - 32 - (smallLandscape ? LANDSCAPE_PANEL_W * 2 : 0);
+  const availH = vh - (smallLandscape ? 32 : HEADER_H);
   return Math.max(0.28, Math.min(1, availW / CONTAINER_W, availH / CONTAINER_H));
 }
 
@@ -77,7 +81,7 @@ function computeScale() {
 export default function App() {
   const {
     grid, leftPending, rightPending, topPending,
-    score, missCount, gameOver,
+    score, gameOver,
     flyingTiles, flyingSource,
     flashSet, redFlashSet, redFlashSource,
     collapsingCells, disabledLeft, disabledRight, disabledTop,
@@ -85,7 +89,7 @@ export default function App() {
   } = useGameStore();
 
   const [scale, setScale] = useState(() =>
-    typeof window === 'undefined' ? 1 : computeScale()
+    typeof document === 'undefined' ? 1 : computeScale()
   );
 
   const touchStart = useRef(null);
@@ -146,18 +150,17 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1 className="title">TILES</h1>
-      <div className="scoreboard">
+      <div className="game-header">
+        <h1 className="title">TILES</h1>
         <p className="score">Score: {score}</p>
-        <p className="misses">Misses: {missCount}</p>
+        <p className="hint">
+          {isTouch
+            ? 'swipe ← → to push  ·  swipe ↓ to drop'
+            : '← → push tiles in  ·  ↓ drop from top'}
+        </p>
       </div>
-      <p className="hint">
-        {isTouch
-          ? 'swipe ← → to push  ·  swipe ↓ to drop'
-          : '← → push tiles in  ·  ↓ drop from top'}
-      </p>
       <div className="arena-container">
-        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0 }}>
+        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, maxWidth: '100%' }}>
           <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
 
             {gameOver && (
@@ -245,6 +248,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      <div className="swipe-zone" />
     </div>
   );
 }

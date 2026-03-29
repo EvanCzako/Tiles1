@@ -7,11 +7,31 @@ export const PENDING_ROW_START = ROWS - PENDING_SIZE; // 5
 export const PENDING_COL_START = 2; // cols 2-7 for top, 2-6 for sides
 export const CENTER_COL = Math.floor(COLS / 2); // 5
 
-export function createInitialGrid() {
+export const GRID_CONFIGS = {
+  '10x10': {
+    ROWS: 10, COLS: 10, PENDING_SIZE: 5, TOP_PENDING_SIZE: 6,
+    PENDING_ROW_START: 5, PENDING_COL_START: 2, CENTER_COL: 5,
+  },
+  '8x8': {
+    ROWS: 8, COLS: 8, PENDING_SIZE: 4, TOP_PENDING_SIZE: 4,
+    PENDING_ROW_START: 4, PENDING_COL_START: 2, CENTER_COL: 4,
+  },
+};
+
+const DEFAULT_CFG = GRID_CONFIGS['10x10'];
+
+export function createInitialGrid(cfg = DEFAULT_CFG) {
+  const { ROWS, COLS, TOP_PENDING_SIZE, PENDING_COL_START } = cfg;
   const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-  for (let c = 2; c <= 7; c++) grid[9][c] = 3;
-  for (let c = 3; c <= 6; c++) grid[8][c] = 3;
-  for (let c = 4; c <= 5; c++) grid[7][c] = 3;
+  // Build pyramid at bottom: bottom row is TOP_PENDING_SIZE wide, each row above loses 2
+  let width = TOP_PENDING_SIZE;
+  let row = ROWS - 1;
+  while (width >= 2) {
+    const start = PENDING_COL_START + Math.floor((TOP_PENDING_SIZE - width) / 2);
+    for (let c = start; c < start + width; c++) grid[row][c] = 3;
+    width -= 2;
+    row--;
+  }
   return grid;
 }
 
@@ -24,12 +44,12 @@ function randTile() {
   return 5;
 }
 
-export function createInitialPending() {
-  return Array.from({ length: PENDING_SIZE }, randTile);
+export function createInitialPending(cfg = DEFAULT_CFG) {
+  return Array.from({ length: cfg.PENDING_SIZE }, randTile);
 }
 
-export function createInitialTopPending() {
-  return Array.from({ length: TOP_PENDING_SIZE }, randTile);
+export function createInitialTopPending(cfg = DEFAULT_CFG) {
+  return Array.from({ length: cfg.TOP_PENDING_SIZE }, randTile);
 }
 
 function collide(moving, stationary) {
@@ -38,7 +58,8 @@ function collide(moving, stationary) {
   return null;
 }
 
-export function pushFromLeft(grid, leftPending) {
+export function pushFromLeft(grid, leftPending, cfg = DEFAULT_CFG) {
+  const { COLS, PENDING_SIZE, PENDING_ROW_START } = cfg;
   const newGrid = grid.map(row => [...row]);
   const newPending = [...leftPending];
   const mergedCells = [];
@@ -87,7 +108,8 @@ export function pushFromLeft(grid, leftPending) {
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
-export function pushFromRight(grid, rightPending) {
+export function pushFromRight(grid, rightPending, cfg = DEFAULT_CFG) {
+  const { COLS, PENDING_SIZE, PENDING_ROW_START } = cfg;
   const newGrid = grid.map(row => [...row]);
   const newPending = [...rightPending];
   const mergedCells = [];
@@ -136,7 +158,8 @@ export function pushFromRight(grid, rightPending) {
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
-export function pushFromTop(grid, topPending) {
+export function pushFromTop(grid, topPending, cfg = DEFAULT_CFG) {
+  const { ROWS, PENDING_COL_START } = cfg;
   const newGrid = grid.map(row => [...row]);
   const newPending = [...topPending];
   const mergedCells = [];
@@ -179,7 +202,8 @@ export function pushFromTop(grid, topPending) {
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
-export function collapseGrid(grid) {
+export function collapseGrid(grid, cfg = DEFAULT_CFG) {
+  const { ROWS, COLS, CENTER_COL } = cfg;
   const newGrid = grid.map(row => [...row]);
   const allMoves = [];
 
