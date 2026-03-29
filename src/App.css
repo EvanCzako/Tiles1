@@ -1,5 +1,7 @@
 html, body {
   overscroll-behavior: none;
+  overflow: hidden;
+  width: 100%;
 }
 
 * {
@@ -15,6 +17,20 @@ html, body {
   padding: 16px;
   touch-action: none;
   user-select: none;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.arena-container {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: hidden;
 }
 
 .title {

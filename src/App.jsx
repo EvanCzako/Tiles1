@@ -1,62 +1,24 @@
-import { useEffect, useLayoutEffect, useCallback, useReducer, useState, useRef } from 'react'
-import {
-  ROWS, COLS, PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
-  createInitialGrid, createInitialPending, createInitialTopPending,
-  pushFromLeft, pushFromRight, pushFromTop,
-  collapseGrid, getTileColor, isDeadCell,
-} from './gameLogic'
+import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react'
+import useGameStore, {
+  CONTAINER_W, CONTAINER_H, CELL, GAP, ANIM_MS,
+  sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft,
+} from './store'
+import { PENDING_ROW_START, isDeadCell, getTileColor } from './gameLogic'
 import './App.css'
 
-const CELL = 52;
-const GAP  = 4;
-const ANIM_MS  = 220;
-const FLASH_MS = 320;
+// Height consumed by title + scoreboard + hint + gaps + app padding (both sides).
+// Used to compute available arena height from window.innerHeight without
+// measuring DOM elements (avoids BoundingClientRect race conditions on resize).
+const HEADER_H = 140;
 
-// ── Layout (all module-level so position helpers don't need the component) ──
-const sideOffset    = CELL + GAP * 4;                             // 68
-const gridPx        = COLS * CELL + (COLS - 1) * GAP;             // 500
-const gridTopOffset = 3 * (CELL + GAP);                           // 168
-const gridBottom    = gridTopOffset + ROWS * (CELL + GAP) - GAP;  // 668
-const pendingColTop = gridBottom - PENDING_SIZE * (CELL + GAP) + GAP; // 392
-const topPendingLeft = PENDING_COL_START * (CELL + GAP);          // 112
-const CONTAINER_H   = gridTopOffset + ROWS * (CELL + GAP);
-const CONTAINER_W   = gridPx + 2 * (CELL + GAP * 4);
+const isTouch = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Pixel position of a grid cell's top-left corner in the arena
-const cellPos = (r, c) => ({
-  x: sideOffset + c * (CELL + GAP),
-  y: gridTopOffset + r * (CELL + GAP),
-});
-
-// Pixel position of each pending tile
-const leftPendingPos  = i => ({ x: 0,                                    y: pendingColTop + i * (CELL + GAP) });
-const rightPendingPos = i => ({ x: sideOffset + gridPx + GAP * 4,        y: pendingColTop + i * (CELL + GAP) });
-const topPendingPos   = i => ({ x: sideOffset + topPendingLeft + i * (CELL + GAP), y: 0 });
-
-// ── State ──────────────────────────────────────────────────────────────────
-function initState() {
-  return {
-    grid: createInitialGrid(),
-    leftPending:  createInitialPending(),
-    rightPending: createInitialPending(),
-    topPending:   createInitialTopPending(),
-  };
-}
-
-function reducer(state, action) {
-  if (action.type === 'APPLY') return { ...state, ...action.payload };
-  if (action.type === 'RESET') return initState();
-  return state;
-}
-
-// ── FlyingTile ─────────────────────────────────────────────────────────────
-// Sits at `to` position in the arena, starts offset by (from - to), then
-// transitions to (0,0) — creating the sliding-in effect.
+// ── FlyingTile ──────────────────────────────────────────────────────────────
 function FlyingTile({ value, fromX, fromY, toX, toY, flyThrough = false }) {
   const [active, setActive] = useState(false);
 
   useEffect(() => {
-    // Double-RAF ensures initial offset renders before transition starts
     const id = requestAnimationFrame(() =>
       requestAnimationFrame(() => setActive(true))
     );
@@ -89,14 +51,14 @@ function FlyingTile({ value, fromX, fromY, toX, toY, flyThrough = false }) {
   );
 }
 
-// ── Static Tile ────────────────────────────────────────────────────────────
+// ── Static Tile ─────────────────────────────────────────────────────────────
 function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled = false }) {
   const { bg, text } = disabled
     ? { bg: '#4a1c1c', text: '#c06060' }
     : getTileColor(value);
   return (
     <div
-      className={`tile ${value > 0 && !disabled ? 'tile--filled' : ''} ${flashing ? 'tile--flash' : ''} ${flashRed ? 'tile--flash-red' : ''} ${disabled ? 'tile--disabled' : ''}`}
+      className={`tile${value > 0 && !disabled ? ' tile--filled' : ''}${flashing ? ' tile--flash' : ''}${flashRed ? ' tile--flash-red' : ''}${disabled ? ' tile--disabled' : ''}`}
       style={{ width: size, height: size, background: bg, color: text, fontSize: size * 0.35 }}
     >
       {value > 0 && !disabled ? value : ''}
@@ -104,259 +66,75 @@ function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled
   );
 }
 
-// ── Responsive scale + touch detection ────────────────────────────────────
-const isTouch = typeof window !== 'undefined' &&
-  ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+// ── Scale calculation (pure — no DOM measurement) ───────────────────────────
+function computeScale() {
+  const availW = window.innerWidth  - 32;       // 16px padding each side
+  const availH = window.innerHeight - HEADER_H;
+  return Math.max(0.28, Math.min(1, availW / CONTAINER_W, availH / CONTAINER_H));
+}
 
-// ── App ────────────────────────────────────────────────────────────────────
+// ── App ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [state, dispatch]     = useReducer(reducer, null, initState);
-  const [score, setScore]     = useState(0);
-  const [missCount, setMissCount] = useState(0);
-  const [animating, setAnimating] = useState(false);
-  const [flyingTiles, setFlyingTiles] = useState([]);
-  const [flyingSource, setFlyingSource] = useState(null); // 'left'|'right'|'top'|null
-  const [flashSet, setFlashSet] = useState(new Set());
-  const [redFlashSet, setRedFlashSet] = useState(new Set()); // pending slot indices flashing red
-  const [redFlashSource, setRedFlashSource] = useState(null); // which pending key owns the red flash
-  const [collapsingCells, setCollapsingCells] = useState(new Set());
-  const [disabledLeft, setDisabledLeft]   = useState(new Set());
-  const [disabledRight, setDisabledRight] = useState(new Set());
-  const [disabledTop, setDisabledTop]     = useState(new Set());
-  const [gameOver, setGameOver]           = useState(false);
-  const [scale, setScale]                 = useState(1);
-  const pendingCommit = useRef(null); // stores { payload, mergedCells, pushScore }
-  const arenaRef   = useRef(null);
+  const {
+    grid, leftPending, rightPending, topPending,
+    score, missCount, gameOver,
+    flyingTiles, flyingSource,
+    flashSet, redFlashSet, redFlashSource,
+    collapsingCells, disabledLeft, disabledRight, disabledTop,
+    triggerPush, reset,
+  } = useGameStore();
+
+  const [scale, setScale] = useState(() =>
+    typeof window === 'undefined' ? 1 : computeScale()
+  );
+
   const touchStart = useRef(null);
 
+  // ── Responsive scale ───────────────────────────────────────────────────────
   useLayoutEffect(() => {
-    const update = () => {
-      const overheadH = 140; // title + scoreboard + hint + gaps + padding
-      const s = Math.min(
-        1,
-        (window.innerWidth  - 24) / CONTAINER_W,
-        (window.innerHeight - overheadH) / CONTAINER_H,
-      );
-      setScale(Math.max(0.28, s));
-    };
+    let rafId = null;
+    const update = () => setScale(computeScale());
+    const defer  = () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(update); };
+
+    const ro = new ResizeObserver(defer);
+    ro.observe(document.documentElement);
+    window.addEventListener('resize', defer);
+    window.visualViewport?.addEventListener('resize', defer);
     update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+      window.removeEventListener('resize', defer);
+      window.visualViewport?.removeEventListener('resize', defer);
+    };
   }, []);
 
+  // ── Keyboard ───────────────────────────────────────────────────────────────
   const handleKey = useCallback((e) => {
-    if (animating || gameOver) return;
-
-    let pushFn, pendingArg, pendingKey, getPendingPos;
-
-    if (e.key === 'ArrowLeft') {
-      pushFn = pushFromLeft;  pendingArg = state.leftPending;
-      pendingKey = 'leftPending';  getPendingPos = leftPendingPos;
-    } else if (e.key === 'ArrowRight') {
-      pushFn = pushFromRight; pendingArg = state.rightPending;
-      pendingKey = 'rightPending'; getPendingPos = rightPendingPos;
-    } else if (e.key === 'ArrowDown') {
-      pushFn = pushFromTop;   pendingArg = state.topPending;
-      pendingKey = 'topPending';   getPendingPos = topPendingPos;
-    } else {
-      return;
-    }
-
-    e.preventDefault();
-
-    const disabled = pendingKey === 'leftPending' ? disabledLeft
-                   : pendingKey === 'rightPending' ? disabledRight
-                   : disabledTop;
-    const filteredPending = pendingArg.map((v, i) => disabled.has(i) ? 0 : v);
-
-    const result = pushFn(state.grid, filteredPending);
-    const { landings, mergedCells, score: pushScore, blockedIndices } = result;
-
-    if (blockedIndices.length > 0) {
-      setMissCount(prev => prev + blockedIndices.length);
-      setRedFlashSet(new Set(blockedIndices));
-      setRedFlashSource(pendingKey);
-    }
-
-    // Store state to commit after animation
-    pendingCommit.current = {
-      payload: { grid: result.grid, [pendingKey]: result.pending },
-      mergedCells,
-      pushScore,
-      blockedIndices,
-      pendingKey,
-    };
-
-    // Build flying tile list from landings
-    // Skip fly-through animation for left/right slots whose row has no tiles (they're hidden)
-    const rowIsVisible = (pendingIdx) => {
-      if (pendingKey === 'topPending') return true;
-      const row = PENDING_ROW_START + pendingIdx;
-      return state.grid[row].some(v => v !== 0);
-    };
-
-    const flying = landings.filter(land => !land.flyThrough || rowIsVisible(land.pendingIdx)).map((land, idx) => {
-      const from = getPendingPos(land.pendingIdx);
-      let to, flyThrough;
-      if (land.flyThrough) {
-        flyThrough = true;
-        if (pendingKey === 'leftPending')       to = { x: CONTAINER_W + CELL, y: from.y };
-        else if (pendingKey === 'rightPending') to = { x: -CELL * 2,          y: from.y };
-        else                                    to = { x: from.x, y: CONTAINER_H + CELL };
-      } else {
-        flyThrough = false;
-        to = cellPos(land.row, land.col);
-      }
-      return { id: idx, value: pendingArg[land.pendingIdx], from, to, flyThrough };
-    });
-
-    if (flying.length === 0) {
-      // Nothing landed — commit immediately, no animation
-      dispatch({ type: 'APPLY', payload: pendingCommit.current.payload });
-      const newDL = pendingKey === 'leftPending'  ? new Set([...disabledLeft,  ...blockedIndices]) : disabledLeft;
-      const newDR = pendingKey === 'rightPending' ? new Set([...disabledRight, ...blockedIndices]) : disabledRight;
-      const newDT = pendingKey === 'topPending'   ? new Set([...disabledTop,   ...blockedIndices]) : disabledTop;
-      if (blockedIndices.length > 0) {
-        if (pendingKey === 'leftPending')  setDisabledLeft(newDL);
-        if (pendingKey === 'rightPending') setDisabledRight(newDR);
-        if (pendingKey === 'topPending')   setDisabledTop(newDT);
-        setTimeout(() => { setRedFlashSet(new Set()); setRedFlashSource(null); }, FLASH_MS);
-      }
-      const g0 = pendingCommit.current.payload.grid;
-      const rowAct0 = i => g0[PENDING_ROW_START + i].some(v => v !== 0);
-      if (Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct0(i) || newDL.has(i)) &&
-          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct0(i) || newDR.has(i)) &&
-          Array.from({length: TOP_PENDING_SIZE}, (_, i) => i).every(i => newDT.has(i))) setGameOver(true);
-      return;
-    }
-
-    const sourceKey = pendingKey.replace('Pending', ''); // 'left'|'right'|'top'
-    setFlyingTiles(flying);
-    setFlyingSource(sourceKey);
-    setAnimating(true);
-
-    setTimeout(() => {
-      const { payload, mergedCells, pushScore, blockedIndices: blocked, pendingKey: pKey } = pendingCommit.current;
-
-      // Update score
-      setScore(prev => prev + pushScore);
-
-      // Flash merged cells
-      if (mergedCells.length > 0) {
-        const keys = new Set(mergedCells.map(([r, c]) => `${r},${c}`));
-        setFlashSet(keys);
-        setTimeout(() => setFlashSet(new Set()), FLASH_MS);
-      }
-
-      // Update disabled sets for any newly blocked tiles
-      const newDL = pKey === 'leftPending'  ? new Set([...disabledLeft,  ...blocked]) : disabledLeft;
-      const newDR = pKey === 'rightPending' ? new Set([...disabledRight, ...blocked]) : disabledRight;
-      const newDT = pKey === 'topPending'   ? new Set([...disabledTop,   ...blocked]) : disabledTop;
-      if (blocked.length > 0) {
-        if (pKey === 'leftPending')  setDisabledLeft(newDL);
-        if (pKey === 'rightPending') setDisabledRight(newDR);
-        if (pKey === 'topPending')   setDisabledTop(newDT);
-      }
-
-      // Clear push animation artifacts
-      setFlyingTiles([]);
-      setFlyingSource(null);
-      setRedFlashSet(new Set());
-      setRedFlashSource(null);
-
-      // Check for collapses in the post-push grid
-      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
-
-      // Helper: check game-over given the final settled grid and updated disabled sets
-      const isGameOver = (finalGrid) => {
-        const rowAct = i => finalGrid[PENDING_ROW_START + i].some(v => v !== 0);
-        return (
-          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct(i) || newDL.has(i)) &&
-          Array.from({length: PENDING_SIZE},     (_, i) => i).every(i => !rowAct(i) || newDR.has(i)) &&
-          Array.from({length: TOP_PENDING_SIZE}, (_, i) => i).every(i => newDT.has(i))
-        );
-      };
-
-      if (moves.length === 0) {
-        dispatch({ type: 'APPLY', payload });
-        if (isGameOver(payload.grid)) setGameOver(true);
-        setAnimating(false);
-        return;
-      }
-
-      // Commit post-push state (holes visible), then animate collapse
-      dispatch({ type: 'APPLY', payload });
-
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const collapseTiles = moves.map((m, idx) => ({
-          id: `collapse-${idx}`,
-          value: m.value,
-          from: cellPos(m.fromRow, m.fromCol),
-          to:   cellPos(m.toRow,   m.toCol),
-          flyThrough: false,
-        }));
-        setFlyingTiles(collapseTiles);
-        setCollapsingCells(new Set(moves.map(m => `${m.fromRow},${m.fromCol}`)));
-
-        setTimeout(() => {
-          dispatch({ type: 'APPLY', payload: { grid: collapsedGrid } });
-          setFlyingTiles([]);
-          setCollapsingCells(new Set());
-          if (isGameOver(collapsedGrid)) setGameOver(true);
-          setAnimating(false);
-        }, ANIM_MS + 30);
-      }));
-    }, ANIM_MS + 30);
-
-  }, [animating, state, gameOver, disabledLeft, disabledRight, disabledTop]);
+    if (e.key === 'ArrowLeft')       { e.preventDefault(); triggerPush('left');  }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); triggerPush('right'); }
+    else if (e.key === 'ArrowDown')  { e.preventDefault(); triggerPush('down');  }
+  }, [triggerPush]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
-  const handleRestart = useCallback(() => {
-    dispatch({ type: 'RESET' });
-    setScore(0);
-    setMissCount(0);
-    setAnimating(false);
-    setFlyingTiles([]);
-    setFlyingSource(null);
-    setFlashSet(new Set());
-    setRedFlashSet(new Set());
-    setRedFlashSource(null);
-    setCollapsingCells(new Set());
-    setDisabledLeft(new Set());
-    setDisabledRight(new Set());
-    setDisabledTop(new Set());
-    setGameOver(false);
-    pendingCommit.current = null;
-  }, []);
-
-  // Wrap handleKey for programmatic (touch) calls
-  const triggerAction = useCallback((key) => {
-    handleKey({ key, preventDefault() {} });
-  }, [handleKey]);
-
-  // Document-level swipe detection
+  // ── Touch / swipe ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const onStart = (e) => {
-      const t = e.touches[0];
-      touchStart.current = { x: t.clientX, y: t.clientY };
+    const onStart = e => {
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     };
-    const onEnd = (e) => {
+    const onEnd = e => {
       if (!touchStart.current) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - touchStart.current.x;
-      const dy = t.clientY - touchStart.current.y;
+      const dx = e.changedTouches[0].clientX - touchStart.current.x;
+      const dy = e.changedTouches[0].clientY - touchStart.current.y;
       touchStart.current = null;
-      const adx = Math.abs(dx), ady = Math.abs(dy);
-      if (adx < 30 && ady < 30) return; // tap, not swipe
-      if (adx >= ady) {
-        triggerAction(dx < 0 ? 'ArrowLeft' : 'ArrowRight');
-      } else if (dy > 0) {
-        triggerAction('ArrowDown');
-      }
+      if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return;
+      if (Math.abs(dx) >= Math.abs(dy)) triggerPush(dx < 0 ? 'left' : 'right');
+      else if (dy > 0) triggerPush('down');
     };
     document.addEventListener('touchstart', onStart, { passive: true });
     document.addEventListener('touchend',   onEnd,   { passive: true });
@@ -364,9 +142,7 @@ export default function App() {
       document.removeEventListener('touchstart', onStart);
       document.removeEventListener('touchend',   onEnd);
     };
-  }, [triggerAction]);
-
-  const { grid, leftPending, rightPending, topPending } = state;
+  }, [triggerPush]);
 
   return (
     <div className="app">
@@ -380,92 +156,93 @@ export default function App() {
           ? 'swipe ← → to push  ·  swipe ↓ to drop'
           : '← → push tiles in  ·  ↓ drop from top'}
       </p>
-      <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, flexShrink: 0, overflow: 'hidden' }}>
-        <div ref={arenaRef} className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: 'scale(' + scale + ')', transformOrigin: 'top left' }}>
+      <div className="arena-container">
+        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, marginTop: Math.max(0, window.innerHeight - HEADER_H - CONTAINER_H * scale) / 4 }}>
+          <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
 
-        {gameOver && (
-          <div className="game-over-overlay">
-            <div className="game-over-box">
-              <h2>GAME OVER</h2>
-              <p>Score: {score}</p>
-              <button onClick={handleRestart}>Play Again</button>
-            </div>
-          </div>
-        )}
+            {gameOver && (
+              <div className="game-over-overlay">
+                <div className="game-over-box">
+                  <h2>GAME OVER</h2>
+                  <p>Score: {score}</p>
+                  <button onClick={reset}>Play Again</button>
+                </div>
+              </div>
+            )}
 
-        {/* Flying tile overlays */}
-        {flyingTiles.map(ft => (
-          <FlyingTile
-            key={ft.id}
-            value={ft.value}
-            fromX={ft.from.x} fromY={ft.from.y}
-            toX={ft.to.x}   toY={ft.to.y}
-            flyThrough={ft.flyThrough}
-          />
-        ))}
-
-        {/* Top pending row */}
-        <div className="pending-row" style={{ left: sideOffset + topPendingLeft, top: 0 }}>
-          {topPending.map((val, i) => {
-            const isDisabled = disabledTop.has(i);
-            const isBlocked  = redFlashSource === 'topPending' && redFlashSet.has(i);
-            return (
-              <Tile key={i}
-                value={flyingSource === 'top' && !isBlocked && !isDisabled ? 0 : val}
-                flashRed={isBlocked}
-                disabled={isDisabled}
+            {flyingTiles.map(ft => (
+              <FlyingTile
+                key={ft.id}
+                value={ft.value}
+                fromX={ft.from.x} fromY={ft.from.y}
+                toX={ft.to.x}     toY={ft.to.y}
+                flyThrough={ft.flyThrough}
               />
-            );
-          })}
-        </div>
+            ))}
 
-        {/* Left pending column */}
-        <div className="pending-col" style={{ left: 0, top: pendingColTop }}>
-          {leftPending.map((val, i) => {
-            const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
-            const isDisabled = disabledLeft.has(i);
-            const isBlocked  = redFlashSource === 'leftPending' && redFlashSet.has(i);
-            return rowActive
-              ? <Tile key={i}
-                  value={flyingSource === 'left' && !isBlocked && !isDisabled ? 0 : val}
-                  flashRed={isBlocked}
-                  disabled={isDisabled}
-                />
-              : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
-          })}
-        </div>
-
-        {/* Grid */}
-        <div className="grid" style={{ left: sideOffset, top: gridTopOffset, width: gridPx }}>
-          {grid.map((row, r) =>
-            row.map((val, c) => (
-              isDeadCell(r, c)
-                ? <div key={`${r}-${c}`} className="tile tile--dead" style={{ width: CELL, height: CELL }} />
-                : <Tile
-                    key={`${r}-${c}`}
-                    value={collapsingCells.has(`${r},${c}`) ? 0 : val}
-                    flashing={flashSet.has(`${r},${c}`)}
+            {/* Top pending */}
+            <div className="pending-row" style={{ left: sideOffset + topPendingLeft, top: 0 }}>
+              {topPending.map((val, i) => {
+                const isDisabled = disabledTop.has(i);
+                const isBlocked  = redFlashSource === 'topPending' && redFlashSet.has(i);
+                return (
+                  <Tile key={i}
+                    value={flyingSource === 'top' && !isBlocked && !isDisabled ? 0 : val}
+                    flashRed={isBlocked}
+                    disabled={isDisabled}
                   />
-            ))
-          )}
-        </div>
+                );
+              })}
+            </div>
 
-        {/* Right pending column */}
-        <div className="pending-col" style={{ left: sideOffset + gridPx + GAP * 4, top: pendingColTop }}>
-          {rightPending.map((val, i) => {
-            const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
-            const isDisabled = disabledRight.has(i);
-            const isBlocked  = redFlashSource === 'rightPending' && redFlashSet.has(i);
-            return rowActive
-              ? <Tile key={i}
-                  value={flyingSource === 'right' && !isBlocked && !isDisabled ? 0 : val}
-                  flashRed={isBlocked}
-                  disabled={isDisabled}
-                />
-              : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
-          })}
-        </div>
+            {/* Left pending */}
+            <div className="pending-col" style={{ left: 0, top: pendingColTop }}>
+              {leftPending.map((val, i) => {
+                const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+                const isDisabled = disabledLeft.has(i);
+                const isBlocked  = redFlashSource === 'leftPending' && redFlashSet.has(i);
+                return rowActive
+                  ? <Tile key={i}
+                      value={flyingSource === 'left' && !isBlocked && !isDisabled ? 0 : val}
+                      flashRed={isBlocked}
+                      disabled={isDisabled}
+                    />
+                  : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
+              })}
+            </div>
 
+            {/* Grid */}
+            <div className="grid" style={{ left: sideOffset, top: gridTopOffset, width: gridPx }}>
+              {grid.map((row, r) =>
+                row.map((val, c) => (
+                  isDeadCell(r, c)
+                    ? <div key={`${r}-${c}`} className="tile tile--dead" style={{ width: CELL, height: CELL }} />
+                    : <Tile
+                        key={`${r}-${c}`}
+                        value={collapsingCells.has(`${r},${c}`) ? 0 : val}
+                        flashing={flashSet.has(`${r},${c}`)}
+                      />
+                ))
+              )}
+            </div>
+
+            {/* Right pending */}
+            <div className="pending-col" style={{ left: sideOffset + gridPx + GAP * 4, top: pendingColTop }}>
+              {rightPending.map((val, i) => {
+                const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+                const isDisabled = disabledRight.has(i);
+                const isBlocked  = redFlashSource === 'rightPending' && redFlashSet.has(i);
+                return rowActive
+                  ? <Tile key={i}
+                      value={flyingSource === 'right' && !isBlocked && !isDisabled ? 0 : val}
+                      flashRed={isBlocked}
+                      disabled={isDisabled}
+                    />
+                  : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
+              })}
+            </div>
+
+          </div>
         </div>
       </div>
     </div>
