@@ -3,7 +3,7 @@ import {
   ROWS, COLS, PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
   createInitialGrid, createInitialPending,
   pushFromLeft, pushFromRight, pushFromTop,
-  getTileColor, isDeadCell,
+  collapseGrid, getTileColor, isDeadCell,
 } from './gameLogic'
 import './App.css'
 
@@ -109,6 +109,7 @@ export default function App() {
   const [flyingTiles, setFlyingTiles] = useState([]);
   const [flyingSource, setFlyingSource] = useState(null); // 'left'|'right'|'top'|null
   const [flashSet, setFlashSet] = useState(new Set());
+  const [collapsingCells, setCollapsingCells] = useState(new Set());
   const pendingCommit = useRef(null); // stores { payload, mergedCells }
 
   const handleKey = useCallback((e) => {
@@ -176,16 +177,48 @@ export default function App() {
 
     setTimeout(() => {
       const { payload, mergedCells } = pendingCommit.current;
-      dispatch({ type: 'APPLY', payload });
-      setFlyingTiles([]);
-      setFlyingSource(null);
-      setAnimating(false);
 
+      // Flash merged cells
       if (mergedCells.length > 0) {
         const keys = new Set(mergedCells.map(([r, c]) => `${r},${c}`));
         setFlashSet(keys);
         setTimeout(() => setFlashSet(new Set()), FLASH_MS);
       }
+
+      // Clear push animation artifacts
+      setFlyingTiles([]);
+      setFlyingSource(null);
+
+      // Check for collapses in the post-push grid
+      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
+
+      if (moves.length === 0) {
+        dispatch({ type: 'APPLY', payload });
+        setAnimating(false);
+        return;
+      }
+
+      // Commit post-push state (holes visible), then animate collapse
+      dispatch({ type: 'APPLY', payload });
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const collapseTiles = moves.map((m, idx) => ({
+          id: `collapse-${idx}`,
+          value: m.value,
+          from: cellPos(m.fromRow, m.fromCol),
+          to:   cellPos(m.toRow,   m.toCol),
+          flyThrough: false,
+        }));
+        setFlyingTiles(collapseTiles);
+        setCollapsingCells(new Set(moves.map(m => `${m.fromRow},${m.fromCol}`)));
+
+        setTimeout(() => {
+          dispatch({ type: 'APPLY', payload: { grid: collapsedGrid } });
+          setFlyingTiles([]);
+          setCollapsingCells(new Set());
+          setAnimating(false);
+        }, ANIM_MS + 30);
+      }));
     }, ANIM_MS + 30);
 
   }, [animating, state]);
@@ -237,7 +270,11 @@ export default function App() {
             row.map((val, c) => (
               isDeadCell(r, c)
                 ? <div key={`${r}-${c}`} className="tile tile--dead" style={{ width: CELL, height: CELL }} />
-                : <Tile key={`${r}-${c}`} value={val} flashing={flashSet.has(`${r},${c}`)} />
+                : <Tile
+                    key={`${r}-${c}`}
+                    value={collapsingCells.has(`${r},${c}`) ? 0 : val}
+                    flashing={flashSet.has(`${r},${c}`)}
+                  />
             ))
           )}
         </div>

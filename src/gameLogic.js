@@ -4,6 +4,7 @@ export const PENDING_SIZE = 5;
 
 export const PENDING_ROW_START = ROWS - PENDING_SIZE; // 4
 export const PENDING_COL_START = 2; // cols 2-6
+export const CENTER_COL = Math.floor(COLS / 2); // 4
 
 export function createInitialGrid() {
   const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
@@ -165,6 +166,131 @@ export function pushFromTop(grid, topPending) {
   }
 
   return { grid: newGrid, pending: newPending, mergedCells, landings };
+}
+
+// Returns true if there is an empty cell sandwiched between occupied cells
+function hasHole(values) {
+  const first = values.findIndex(v => v !== 0);
+  if (first === -1) return false;
+  const last = values.length - 1 - [...values].reverse().findIndex(v => v !== 0);
+  for (let i = first; i <= last; i++) {
+    if (values[i] === 0) return true;
+  }
+  return false;
+}
+
+// Returns { grid, moves } where moves = [{ value, fromRow, fromCol, toRow, toCol }]
+export function collapseGrid(grid) {
+  const newGrid = grid.map(row => [...row]);
+  const moves = [];
+
+  // ── Collapse columns downward (full gravity — no floating rows) ──────────
+  for (let c = 0; c < COLS; c++) {
+    const tiles = [];
+    for (let r = 0; r < ROWS; r++) {
+      if (newGrid[r][c] !== 0) tiles.push({ r, v: newGrid[r][c] });
+    }
+    if (tiles.length === 0) continue;
+
+    // Check if already packed to bottom
+    const packed = tiles.every((t, i) => t.r === ROWS - tiles.length + i);
+    if (packed) continue;
+
+    for (let r = 0; r < ROWS; r++) newGrid[r][c] = 0;
+    let dest = ROWS - 1;
+    for (let j = tiles.length - 1; j >= 0; j--) {
+      const { r: from, v } = tiles[j];
+      newGrid[dest][c] = v;
+      if (from !== dest) moves.push({ value: v, fromRow: from, fromCol: c, toRow: dest, toCol: c });
+      dest--;
+    }
+  }
+
+  // ── Collapse rows toward center col ────────────────────────────────────
+  for (let r = 0; r < ROWS; r++) {
+    const rowVals = [...newGrid[r]];
+
+    // Left half: cols 0 … CENTER_COL-1 — pack toward right (center)
+    if (hasHole(rowVals.slice(0, CENTER_COL))) {
+      const tiles = [];
+      for (let c = 0; c < CENTER_COL; c++) {
+        if (rowVals[c] !== 0) tiles.push({ c, v: rowVals[c] });
+      }
+      for (let c = 0; c < CENTER_COL; c++) newGrid[r][c] = 0;
+      let dest = CENTER_COL - 1;
+      for (let j = tiles.length - 1; j >= 0; j--) {
+        const { c: from, v } = tiles[j];
+        newGrid[r][dest] = v;
+        if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+        dest--;
+      }
+    }
+
+    // Right half: cols CENTER_COL+1 … COLS-1 — pack toward left (center)
+    if (hasHole(rowVals.slice(CENTER_COL + 1))) {
+      const tiles = [];
+      for (let c = CENTER_COL + 1; c < COLS; c++) {
+        if (rowVals[c] !== 0) tiles.push({ c, v: rowVals[c] });
+      }
+      for (let c = CENTER_COL + 1; c < COLS; c++) newGrid[r][c] = 0;
+      let dest = CENTER_COL + 1;
+      for (let j = 0; j < tiles.length; j++) {
+        const { c: from, v } = tiles[j];
+        newGrid[r][dest] = v;
+        if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+        dest++;
+      }
+    }
+  }
+
+  // ── Collapse column distribution toward center ─────────────────────────
+  // A column is "occupied" if any cell in it has a tile.
+  // Pack occupied columns toward the center on each half, filling dead columns.
+
+  // Helper: pack a list of source columns into destination columns (right-to-left for left half)
+  function packCols(srcCols, destCols) {
+    // Process in reverse to avoid overwriting tiles we haven't moved yet
+    for (let i = srcCols.length - 1; i >= 0; i--) {
+      const fromCol = srcCols[i];
+      const toCol   = destCols[i];
+      if (fromCol === toCol) continue;
+      for (let r = 0; r < ROWS; r++) {
+        if (newGrid[r][fromCol] !== 0) {
+          moves.push({ value: newGrid[r][fromCol], fromRow: r, fromCol, toRow: r, toCol });
+          newGrid[r][toCol]   = newGrid[r][fromCol];
+          newGrid[r][fromCol] = 0;
+        }
+      }
+    }
+  }
+
+  // Left half: cols 0 … CENTER_COL-1 — occupied cols pack toward right
+  {
+    const occupied = [];
+    for (let c = 0; c < CENTER_COL; c++) {
+      if (newGrid.some(row => row[c] !== 0)) occupied.push(c);
+    }
+    const n = occupied.length;
+    const destinations = Array.from({ length: n }, (_, i) => CENTER_COL - n + i);
+    if (!occupied.every((c, i) => c === destinations[i])) {
+      packCols(occupied, destinations);
+    }
+  }
+
+  // Right half: cols CENTER_COL+1 … COLS-1 — occupied cols pack toward left
+  {
+    const occupied = [];
+    for (let c = CENTER_COL + 1; c < COLS; c++) {
+      if (newGrid.some(row => row[c] !== 0)) occupied.push(c);
+    }
+    const n = occupied.length;
+    const destinations = Array.from({ length: n }, (_, i) => CENTER_COL + 1 + i);
+    if (!occupied.every((c, i) => c === destinations[i])) {
+      packCols(occupied, destinations);
+    }
+  }
+
+  return { grid: newGrid, moves };
 }
 
 export function isDeadCell(r, c) {
