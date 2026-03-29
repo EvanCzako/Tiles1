@@ -190,7 +190,7 @@ export default function App() {
       setFlyingSource(null);
 
       // Check for collapses in the post-push grid
-      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
+      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid, sourceKey);
 
       if (moves.length === 0) {
         dispatch({ type: 'APPLY', payload });

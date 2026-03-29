@@ -27,7 +27,7 @@
 .grid {
   position: absolute;
   display: grid;
-  grid-template-columns: repeat(9, 52px);
+  grid-template-columns: repeat(10, 52px);
   gap: 4px;
   background: #16163a;
   border: 2px solid #2a2a5a;
