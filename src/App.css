@@ -1,17 +1,27 @@
+html, body {
+  overscroll-behavior: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
 .app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 24px;
+  gap: 12px;
+  padding: 16px;
+  touch-action: none;
+  user-select: none;
 }
 
 .title {
   color: #e0e0ff;
-  font-size: 2.4rem;
+  font-size: 2rem;
   font-weight: 800;
-  letter-spacing: 6px;
-  text-shadow: 0 0 20px rgba(100, 160, 255, 0.6);
+  margin: 0;
 }
 
 .scoreboard {
@@ -22,24 +32,22 @@
 
 .score {
   color: #a0a0cc;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  letter-spacing: 2px;
   margin: 0;
 }
 
 .misses {
   color: #e05555;
-  font-size: 1.0rem;
+  font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 2px;
   margin: 0;
 }
 
 .hint {
   color: #8888aa;
-  font-size: 0.85rem;
-  letter-spacing: 1px;
+  font-size: 0.8rem;
+  margin: 0;
 }
 
 .arena {
@@ -52,8 +60,7 @@
   grid-template-columns: repeat(10, 52px);
   gap: 4px;
   background: #16163a;
-  border: 2px solid #2a2a5a;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .pending-row {
@@ -80,32 +87,14 @@
   flex-shrink: 0;
 }
 
-.tile--filled {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
 .tile--dead {
   background: transparent !important;
   box-shadow: none !important;
   border-radius: 0;
 }
 
-/* Pending tiles get a subtle glow to indicate they're ready */
-.pending-row .tile--filled,
-.pending-col .tile--filled {
-  box-shadow: 0 0 10px rgba(74, 144, 217, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* Slight outline on all live pending slots (filled and disabled) */
-.pending-row .tile:not(.tile--dead),
-.pending-col .tile:not(.tile--dead) {
-  outline: 1.5px solid rgba(255, 255, 255, 0.18);
-}
-
-/* Red outline for disabled pending slots */
-.pending-row .tile--disabled,
-.pending-col .tile--disabled {
-  outline: 1.5px solid rgba(200, 80, 80, 0.85);
+.tile--disabled {
+  opacity: 0.4;
 }
 
 @keyframes flash-collapse {
@@ -121,46 +110,39 @@
   position: relative;
 }
 
-.tile--disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
 .game-over-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .game-over-box {
   background: #14142a;
   border: 2px solid #3a3a6a;
-  border-radius: 12px;
-  padding: 36px 52px;
+  border-radius: 10px;
+  padding: 28px 40px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
 .game-over-box h2 {
   color: #e04040;
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 800;
-  letter-spacing: 5px;
   margin: 0;
 }
 
 .game-over-box p {
   color: #a0a0cc;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  letter-spacing: 2px;
   margin: 0;
 }
 
@@ -169,12 +151,10 @@
   color: #fff;
   border: none;
   border-radius: 6px;
-  padding: 10px 28px;
+  padding: 10px 24px;
   font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 2px;
   cursor: pointer;
-  transition: background 0.15s;
 }
 
 .game-over-box button:hover {

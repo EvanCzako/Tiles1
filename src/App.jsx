@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useReducer, useState, useRef } from 'react'
+import { useEffect, useLayoutEffect, useCallback, useReducer, useState, useRef } from 'react'
 import {
   ROWS, COLS, PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
   createInitialGrid, createInitialPending, createInitialTopPending,
@@ -83,7 +83,6 @@ function FlyingTile({ value, fromX, fromY, toX, toY, flyThrough = false }) {
         : 'none',
       pointerEvents: 'none',
       zIndex: 20,
-      boxShadow: '0 2px 14px rgba(0,0,0,0.55)',
     }}>
       {value}
     </div>
@@ -105,6 +104,10 @@ function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled
   );
 }
 
+// ── Responsive scale + touch detection ────────────────────────────────────
+const isTouch = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [state, dispatch]     = useReducer(reducer, null, initState);
@@ -121,7 +124,25 @@ export default function App() {
   const [disabledRight, setDisabledRight] = useState(new Set());
   const [disabledTop, setDisabledTop]     = useState(new Set());
   const [gameOver, setGameOver]           = useState(false);
+  const [scale, setScale]                 = useState(1);
   const pendingCommit = useRef(null); // stores { payload, mergedCells, pushScore }
+  const arenaRef   = useRef(null);
+  const touchStart = useRef(null);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const overheadH = 140; // title + scoreboard + hint + gaps + padding
+      const s = Math.min(
+        1,
+        (window.innerWidth  - 24) / CONTAINER_W,
+        (window.innerHeight - overheadH) / CONTAINER_H,
+      );
+      setScale(Math.max(0.28, s));
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const handleKey = useCallback((e) => {
     if (animating || gameOver) return;
@@ -312,6 +333,39 @@ export default function App() {
     pendingCommit.current = null;
   }, []);
 
+  // Wrap handleKey for programmatic (touch) calls
+  const triggerAction = useCallback((key) => {
+    handleKey({ key, preventDefault() {} });
+  }, [handleKey]);
+
+  // Document-level swipe detection
+  useEffect(() => {
+    const onStart = (e) => {
+      const t = e.touches[0];
+      touchStart.current = { x: t.clientX, y: t.clientY };
+    };
+    const onEnd = (e) => {
+      if (!touchStart.current) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStart.current.x;
+      const dy = t.clientY - touchStart.current.y;
+      touchStart.current = null;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      if (adx < 30 && ady < 30) return; // tap, not swipe
+      if (adx >= ady) {
+        triggerAction(dx < 0 ? 'ArrowLeft' : 'ArrowRight');
+      } else if (dy > 0) {
+        triggerAction('ArrowDown');
+      }
+    };
+    document.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchend',   onEnd,   { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchend',   onEnd);
+    };
+  }, [triggerAction]);
+
   const { grid, leftPending, rightPending, topPending } = state;
 
   return (
@@ -321,8 +375,13 @@ export default function App() {
         <p className="score">Score: {score}</p>
         <p className="misses">Misses: {missCount}</p>
       </div>
-      <p className="hint">← → push tiles in &nbsp;|&nbsp; ↓ drop from top</p>
-      <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H }}>
+      <p className="hint">
+        {isTouch
+          ? 'swipe ← → to push  ·  swipe ↓ to drop'
+          : '← → push tiles in  ·  ↓ drop from top'}
+      </p>
+      <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, flexShrink: 0, overflow: 'hidden' }}>
+        <div ref={arenaRef} className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: 'scale(' + scale + ')', transformOrigin: 'top left' }}>
 
         {gameOver && (
           <div className="game-over-overlay">
@@ -407,6 +466,7 @@ export default function App() {
           })}
         </div>
 
+        </div>
       </div>
     </div>
   );

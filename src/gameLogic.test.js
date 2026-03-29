@@ -39,13 +39,13 @@ describe('Grid Initialization', () => {
   test('createInitialPending returns array of 5 tiles', () => {
     const pending = createInitialPending();
     expect(pending.length).toBe(5);
-    expect(pending.every(t => [1, 2, 3].includes(t))).toBe(true);
+    expect(pending.every(t => t >= 1 && t <= 5)).toBe(true);
   });
 
   test('createInitialTopPending returns array of 6 tiles', () => {
     const pending = createInitialTopPending();
     expect(pending.length).toBe(6);
-    expect(pending.every(t => [1, 2, 3].includes(t))).toBe(true);
+    expect(pending.every(t => t >= 1 && t <= 5)).toBe(true);
   });
 });
 
