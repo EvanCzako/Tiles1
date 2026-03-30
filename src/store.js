@@ -1,35 +1,53 @@
 import { create } from 'zustand';
 import {
-  ROWS, COLS, PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START, PENDING_COL_START,
+  GRID_CONFIGS,
   createInitialGrid, createInitialPending, createInitialTopPending,
-  pushFromLeft, pushFromRight, pushFromTop, collapseGrid,
+  pushFromLeft, pushFromRight, pushFromTop, collapseGrid, annihilateAdjacent,
 } from './gameLogic';
 
-// ── Layout constants ────────────────────────────────────────────────────────
+// ── Fixed constants ─────────────────────────────────────────────────────────
 export const CELL = 52;
 export const GAP  = 4;
 
-export const sideOffset     = CELL + GAP * 4;
-export const gridPx         = COLS * CELL + (COLS - 1) * GAP;
-export const gridTopOffset  = CELL + GAP * 4;
-const        gridBottom     = gridTopOffset + ROWS * (CELL + GAP) - GAP;
-export const pendingColTop  = gridBottom - PENDING_SIZE * (CELL + GAP) + GAP;
-export const topPendingLeft = PENDING_COL_START * (CELL + GAP);
-export const CONTAINER_H    = gridTopOffset + ROWS * (CELL + GAP);
-export const CONTAINER_W    = gridPx + 2 * (CELL + GAP * 4);
+// ── Layout computed from cfg ─────────────────────────────────────────────────
+export function getLayout(cfg) {
+  const { ROWS, COLS, PENDING_SIZE, PENDING_COL_START } = cfg;
+  const sideOffset     = CELL + GAP * 4;
+  const gridPx         = COLS * CELL + (COLS - 1) * GAP;
+  const gridTopOffset  = CELL + GAP * 4;
+  const gridBottom     = gridTopOffset + ROWS * (CELL + GAP) - GAP;
+  const pendingColTop  = gridBottom - PENDING_SIZE * (CELL + GAP) + GAP;
+  const topPendingLeft = PENDING_COL_START * (CELL + GAP);
+  const CONTAINER_H    = gridTopOffset + ROWS * (CELL + GAP);
+  const CONTAINER_W    = gridPx + 2 * (CELL + GAP * 4);
+  return { sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft, CONTAINER_H, CONTAINER_W };
+}
 
 // ── Position helpers ────────────────────────────────────────────────────────
-export const cellPos         = (r, c) => ({ x: sideOffset + c * (CELL + GAP), y: gridTopOffset + r * (CELL + GAP) });
-export const leftPendingPos  = i => ({ x: 0,                              y: pendingColTop + i * (CELL + GAP) });
-export const rightPendingPos = i => ({ x: sideOffset + gridPx + GAP * 4, y: pendingColTop + i * (CELL + GAP) });
-export const topPendingPos   = i => ({ x: sideOffset + topPendingLeft + i * (CELL + GAP), y: 0 });
+export const cellPos         = (r, c, L) => ({ x: L.sideOffset + c * (CELL + GAP), y: L.gridTopOffset + r * (CELL + GAP) });
+export const leftPendingPos  = (i, L)    => ({ x: 0,                                y: L.pendingColTop + i * (CELL + GAP) });
+export const rightPendingPos = (i, L)    => ({ x: L.sideOffset + L.gridPx + GAP * 4, y: L.pendingColTop + i * (CELL + GAP) });
+export const topPendingPos   = (i, L)    => ({ x: L.sideOffset + L.topPendingLeft + i * (CELL + GAP), y: 0 });
 
 // ── Animation timings ───────────────────────────────────────────────────────
-export const ANIM_MS  = 220;
-export const FLASH_MS = 320;
+export const ANIM_MS      = 220;
+export const FLASH_MS     = 320;
+export const AUTO_MOVE_MS = 500;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function checkGameOver(grid, dl, dr, dt) {
+function getAvailableDirections(s) {
+  const { grid, leftPending, rightPending, topPending, disabledLeft, disabledRight, disabledTop, cfg } = s;
+  const { PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START } = cfg;
+  const rowActive = i => grid[PENDING_ROW_START + i].some(v => v !== 0);
+  const dirs = [];
+  if (leftPending.some( (v, i) => v !== 0 && !disabledLeft.has(i)  && i < PENDING_SIZE     && rowActive(i))) dirs.push('right');
+  if (rightPending.some((v, i) => v !== 0 && !disabledRight.has(i) && i < PENDING_SIZE     && rowActive(i))) dirs.push('left');
+  if (topPending.some(  (v, i) => v !== 0 && !disabledTop.has(i)  && i < TOP_PENDING_SIZE))                  dirs.push('down');
+  return dirs;
+}
+
+function checkGameOver(grid, dl, dr, dt, cfg) {
+  const { PENDING_SIZE, TOP_PENDING_SIZE, PENDING_ROW_START } = cfg;
   const rowAct = i => grid[PENDING_ROW_START + i].some(v => v !== 0);
   return (
     Array.from({ length: PENDING_SIZE     }, (_, i) => i).every(i => !rowAct(i) || dl.has(i)) &&
@@ -38,18 +56,24 @@ function checkGameOver(grid, dl, dr, dt) {
   );
 }
 
-function initState() {
+function initState(mode = '9x9') {
+  const cfg    = GRID_CONFIGS[mode];
+  const layout = getLayout(cfg);
   return {
-    grid:           createInitialGrid(),
-    leftPending:    createInitialPending(),
-    rightPending:   createInitialPending(),
-    topPending:     createInitialTopPending(),
+    gridMode:       mode,
+    cfg,
+    layout,
+    grid:           createInitialGrid(cfg),
+    leftPending:    createInitialPending(cfg),
+    rightPending:   createInitialPending(cfg),
+    topPending:     createInitialTopPending(cfg),
     score:          0,
     gameOver:       false,
     animating:      false,
     flyingTiles:    [],
     flyingSource:   null,
     flashSet:       new Set(),
+    annihilateSet:  new Set(),
     redFlashSet:    new Set(),
     redFlashSource: null,
     collapsingCells: new Set(),
@@ -57,7 +81,97 @@ function initState() {
     disabledRight:  new Set(),
     disabledTop:    new Set(),
     pendingCommit:  null,
+    frozenPendingRows: null,  // snapshot of per-row activity at push time; held through cascade
   };
+}
+
+// ── Collapse + annihilate loop ─────────────────────────────────────────────
+function runCollapseLoop(grid, pendingPayload, newDL, newDR, newDT, get, set) {
+  const { cfg } = get();
+  const { grid: collapsedGrid, midGrid, gravityMoves, horizontalMoves } = collapseGrid(grid, cfg);
+
+  const afterCollapse = (settled) => {
+    const curCfg = get().cfg;
+    const { annihilatedCells, grid: annGrid, score: annScore } = annihilateAdjacent(settled, curCfg);
+
+    if (annihilatedCells.length === 0) {
+      // Cascade fully settled — now reveal the refreshed pending tiles
+      set({ animating: false, frozenPendingRows: null, ...pendingPayload });
+      if (checkGameOver(settled, newDL, newDR, newDT, curCfg)) {
+        set({ gameOver: true });
+      } else {
+        const available = getAvailableDirections(get());
+        if (available.length === 1) {
+          setTimeout(() => { if (!get().gameOver && !get().animating) get().triggerPush(available[0]); }, AUTO_MOVE_MS);
+        }
+      }
+      return;
+    }
+
+    set({
+      score: get().score + annScore,
+      annihilateSet: new Set(annihilatedCells.map(([r, c]) => `${r},${c}`)),
+    });
+    setTimeout(() => {
+      set({ grid: annGrid, annihilateSet: new Set() });
+      runCollapseLoop(annGrid, pendingPayload, newDL, newDR, newDT, get, set);
+    }, FLASH_MS);
+  };
+
+  // Animate horizontal phase (inward pack) after gravity has settled
+  const doHorizontalPhase = () => {
+    if (horizontalMoves.length === 0) {
+      afterCollapse(collapsedGrid);
+      return;
+    }
+    const curLayout = get().layout;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      set({
+        flyingTiles: horizontalMoves.map((m, idx) => ({
+          id: `collapse-h-${idx}`,
+          value: m.value,
+          from: cellPos(m.fromRow, m.fromCol, curLayout),
+          to:   cellPos(m.toRow,   m.toCol,   curLayout),
+          flyThrough: false,
+        })),
+        collapsingCells: new Set(horizontalMoves.map(m => `${m.fromRow},${m.fromCol}`)),
+      });
+      setTimeout(() => {
+        set({ grid: collapsedGrid, flyingTiles: [], collapsingCells: new Set() });
+        afterCollapse(collapsedGrid);
+      }, ANIM_MS + 30);
+    }));
+  };
+
+  if (gravityMoves.length === 0 && horizontalMoves.length === 0) {
+    afterCollapse(grid);
+    return;
+  }
+
+  // Skip gravity animation if there are no gravity moves
+  if (gravityMoves.length === 0) {
+    doHorizontalPhase();
+    return;
+  }
+
+  // Animate gravity (downward) first, then horizontal
+  const curLayout = get().layout;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    set({
+      flyingTiles: gravityMoves.map((m, idx) => ({
+        id: `collapse-g-${idx}`,
+        value: m.value,
+        from: cellPos(m.fromRow, m.fromCol, curLayout),
+        to:   cellPos(m.toRow,   m.toCol,   curLayout),
+        flyThrough: false,
+      })),
+      collapsingCells: new Set(gravityMoves.map(m => `${m.fromRow},${m.fromCol}`)),
+    });
+    setTimeout(() => {
+      set({ grid: midGrid, flyingTiles: [], collapsingCells: new Set() });
+      doHorizontalPhase();
+    }, ANIM_MS + 30);
+  }));
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -65,31 +179,47 @@ const useGameStore = create((set, get) => ({
   ...initState(),
 
   reset() {
-    set(initState());
+    set(initState(get().gridMode));
+  },
+
+  setGridMode(mode) {
+    set(initState(mode));
   },
 
   triggerPush(direction) {
     const s = get();
     if (s.animating || s.gameOver) return;
 
+    const { cfg, layout } = s;
     let pushFn, pendingArg, pendingKey, getPendingPos;
     if (direction === 'left') {
       pushFn = pushFromRight; pendingArg = s.rightPending;
-      pendingKey = 'rightPending'; getPendingPos = rightPendingPos;
+      pendingKey = 'rightPending'; getPendingPos = i => rightPendingPos(i, layout);
     } else if (direction === 'right') {
       pushFn = pushFromLeft;  pendingArg = s.leftPending;
-      pendingKey = 'leftPending';  getPendingPos = leftPendingPos;
+      pendingKey = 'leftPending';  getPendingPos = i => leftPendingPos(i, layout);
     } else if (direction === 'down') {
       pushFn = pushFromTop;   pendingArg = s.topPending;
-      pendingKey = 'topPending';   getPendingPos = topPendingPos;
+      pendingKey = 'topPending';   getPendingPos = i => topPendingPos(i, layout);
     } else return;
 
     const disabled = pendingKey === 'leftPending'  ? s.disabledLeft
                    : pendingKey === 'rightPending' ? s.disabledRight
                    : s.disabledTop;
     const filteredPending = pendingArg.map((v, i) => disabled.has(i) ? 0 : v);
-    const result = pushFn(s.grid, filteredPending);
+    const result = pushFn(s.grid, filteredPending, cfg);
     const { landings, mergedCells, score: pushScore, blockedIndices } = result;
+
+    // Snapshot row activity BEFORE the push so pending columns stay frozen at
+    // pre-swipe height for the entire cascade.
+    const { PENDING_SIZE, PENDING_ROW_START } = cfg;
+    const rowActive = i => s.grid[PENDING_ROW_START + i].some(v => v !== 0);
+    const frozenPendingRows = {
+      left:  Array.from({ length: PENDING_SIZE }, (_, i) => rowActive(i)),
+      right: Array.from({ length: PENDING_SIZE }, (_, i) => rowActive(i)),
+    };
+    // Fully refreshed values (result.pending) are applied only when cascade settles.
+    const intermediatePending = pendingArg.map((v, i) => blockedIndices.includes(i) ? v : 0);
 
     const pc = {
       payload:       { grid: result.grid, [pendingKey]: result.pending },
@@ -101,7 +231,7 @@ const useGameStore = create((set, get) => ({
 
     const rowIsVisible = idx => {
       if (pendingKey === 'topPending') return true;
-      return s.grid[PENDING_ROW_START + idx].some(v => v !== 0);
+      return s.grid[cfg.PENDING_ROW_START + idx].some(v => v !== 0);
     };
 
     const flying = landings
@@ -111,12 +241,12 @@ const useGameStore = create((set, get) => ({
         let to, flyThrough;
         if (land.flyThrough) {
           flyThrough = true;
-          if (pendingKey === 'leftPending')       to = { x: CONTAINER_W + CELL, y: from.y };
-          else if (pendingKey === 'rightPending') to = { x: -CELL * 2,          y: from.y };
-          else                                    to = { x: from.x, y: CONTAINER_H + CELL };
+          if (pendingKey === 'leftPending')       to = { x: layout.CONTAINER_W + CELL, y: from.y };
+          else if (pendingKey === 'rightPending') to = { x: -CELL * 2,                  y: from.y };
+          else                                    to = { x: from.x, y: layout.CONTAINER_H + CELL };
         } else {
           flyThrough = false;
-          to = cellPos(land.row, land.col);
+          to = cellPos(land.row, land.col, layout);
         }
         return { id: idx, value: pendingArg[land.pendingIdx], from, to, flyThrough };
       });
@@ -137,7 +267,7 @@ const useGameStore = create((set, get) => ({
       });
       if (blockedIndices.length > 0)
         setTimeout(() => set({ redFlashSet: new Set(), redFlashSource: null }), FLASH_MS);
-      if (checkGameOver(pc.payload.grid, newDL, newDR, newDT)) set({ gameOver: true });
+      if (checkGameOver(pc.payload.grid, newDL, newDR, newDT, cfg)) set({ gameOver: true });
       return;
     }
 
@@ -147,6 +277,7 @@ const useGameStore = create((set, get) => ({
       flyingTiles:    flying,
       flyingSource:   pendingKey.replace('Pending', ''),
       animating:      true,
+      frozenPendingRows,
       missCount:      blockedIndices.length > 0 ? s.missCount + blockedIndices.length : s.missCount,
       redFlashSet:    blockedIndices.length > 0 ? new Set(blockedIndices) : new Set(),
       redFlashSource: blockedIndices.length > 0 ? pendingKey : null,
@@ -178,33 +309,10 @@ const useGameStore = create((set, get) => ({
         setTimeout(() => set({ flashSet: new Set() }), FLASH_MS);
       }
 
-      const { grid: collapsedGrid, moves } = collapseGrid(payload.grid);
-
-      if (moves.length === 0) {
-        set({ ...payload, animating: false });
-        if (checkGameOver(payload.grid, newDL, newDR, newDT)) set({ gameOver: true });
-        return;
-      }
-
-      set(payload); // commit post-push holes
-
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        set({
-          flyingTiles:     moves.map((m, idx) => ({
-            id: `collapse-${idx}`,
-            value: m.value,
-            from: cellPos(m.fromRow, m.fromCol),
-            to:   cellPos(m.toRow,   m.toCol),
-            flyThrough: false,
-          })),
-          collapsingCells: new Set(moves.map(m => `${m.fromRow},${m.fromCol}`)),
-        });
-
-        setTimeout(() => {
-          set({ grid: collapsedGrid, flyingTiles: [], collapsingCells: new Set(), animating: false });
-          if (checkGameOver(collapsedGrid, newDL, newDR, newDT)) set({ gameOver: true });
-        }, ANIM_MS + 30);
-      }));
+      // Commit the grid + intermediate pending (used slots zeroed); hold refreshed pending for cascade end
+      const { grid: payloadGrid, ...pendingPayload } = payload;
+      set({ grid: payloadGrid, [pendingKey]: intermediatePending });
+      runCollapseLoop(payloadGrid, pendingPayload, newDL, newDR, newDT, get, set);
     }, ANIM_MS + 30);
   },
 }));

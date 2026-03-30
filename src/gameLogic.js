@@ -1,34 +1,33 @@
-export const ROWS = 10;
-export const COLS = 10;
-export const PENDING_SIZE = 5;          // side panels: 5 slots
-export const TOP_PENDING_SIZE = 6;      // top row: 6 tiles (cols 2-7), centered
+export const ROWS = 9;
+export const COLS = 9;
+export const PENDING_SIZE = 4;          // side panels: 4 slots
+export const TOP_PENDING_SIZE = 5;      // top row: 5 tiles (cols 2-6), centered
 
 export const PENDING_ROW_START = ROWS - PENDING_SIZE; // 5
-export const PENDING_COL_START = 2; // cols 2-7 for top, 2-6 for sides
-export const CENTER_COL = Math.floor(COLS / 2); // 5
+export const PENDING_COL_START = 2; // cols 2-6 for top
+export const CENTER_COL = Math.floor(COLS / 2); // 4
 
 export const GRID_CONFIGS = {
-  '10x10': {
-    ROWS: 10, COLS: 10, PENDING_SIZE: 5, TOP_PENDING_SIZE: 6,
-    PENDING_ROW_START: 5, PENDING_COL_START: 2, CENTER_COL: 5,
-  },
-  '8x8': {
-    ROWS: 8, COLS: 8, PENDING_SIZE: 4, TOP_PENDING_SIZE: 4,
-    PENDING_ROW_START: 4, PENDING_COL_START: 2, CENTER_COL: 4,
+  '9x9': {
+    ROWS: 9, COLS: 9, PENDING_SIZE: 4, TOP_PENDING_SIZE: 5,
+    PENDING_ROW_START: 5, PENDING_COL_START: 2, CENTER_COL: 4,
   },
 };
 
-const DEFAULT_CFG = GRID_CONFIGS['10x10'];
+const DEFAULT_CFG = GRID_CONFIGS['9x9'];
 
 export function createInitialGrid(cfg = DEFAULT_CFG) {
   const { ROWS, COLS, TOP_PENDING_SIZE, PENDING_COL_START } = cfg;
   const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
   // Build pyramid at bottom: bottom row is TOP_PENDING_SIZE wide, each row above loses 2
+  // Each row has a symmetric ramp: e.g. width 6 → 1 2 3 3 2 1, width 4 → 1 2 2 1, width 2 → 1 1
   let width = TOP_PENDING_SIZE;
   let row = ROWS - 1;
-  while (width >= 2) {
+  while (width >= 1) {
     const start = PENDING_COL_START + Math.floor((TOP_PENDING_SIZE - width) / 2);
-    for (let c = start; c < start + width; c++) grid[row][c] = 3;
+    for (let j = 0; j < width; j++) {
+      grid[row][start + j] = Math.min(j + 1, width - j);
+    }
     width -= 2;
     row--;
   }
@@ -36,25 +35,37 @@ export function createInitialGrid(cfg = DEFAULT_CFG) {
 }
 
 function randTile() {
-  const r = Math.random() * 21;
-  if (r < 6)  return 1;
+  const r = Math.random() * 15.875;
+  if (r < 8) return 1;
   if (r < 12) return 2;
-  if (r < 18) return 3;
-  if (r < 20) return 4;
-  return 5;
+  if (r < 14) return 3;
+  if (r < 15) return 4;
+	if (r < 15.5) return 5;
+	if (r < 15.75) return 6
+  return 7;
+}
+
+function randTileExcluding(exclude) {
+  let v;
+  do { v = randTile(); } while (v === exclude);
+  return v;
 }
 
 export function createInitialPending(cfg = DEFAULT_CFG) {
-  return Array.from({ length: cfg.PENDING_SIZE }, randTile);
+  const arr = [];
+  for (let i = 0; i < cfg.PENDING_SIZE; i++)
+    arr.push(randTileExcluding(arr[i - 1] ?? -1));
+  return arr;
 }
 
 export function createInitialTopPending(cfg = DEFAULT_CFG) {
-  return Array.from({ length: cfg.TOP_PENDING_SIZE }, randTile);
+  const arr = [];
+  for (let i = 0; i < cfg.TOP_PENDING_SIZE; i++)
+    arr.push(randTileExcluding(arr[i - 1] ?? -1));
+  return arr;
 }
 
 function collide(moving, stationary) {
-  if (moving === stationary) return 0;
-  if (moving < stationary) return stationary - moving;
   return null;
 }
 
@@ -102,7 +113,7 @@ export function pushFromLeft(grid, leftPending, cfg = DEFAULT_CFG) {
       }
     }
 
-    newPending[i] = randTile();
+    newPending[i] = randTileExcluding(i > 0 ? newPending[i - 1] : -1);
   }
 
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
@@ -152,7 +163,7 @@ export function pushFromRight(grid, rightPending, cfg = DEFAULT_CFG) {
       }
     }
 
-    newPending[i] = randTile();
+    newPending[i] = randTileExcluding(i > 0 ? newPending[i - 1] : -1);
   }
 
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
@@ -196,7 +207,7 @@ export function pushFromTop(grid, topPending, cfg = DEFAULT_CFG) {
       }
     }
 
-    newPending[i] = randTile();
+    newPending[i] = randTileExcluding(i > 0 ? newPending[i - 1] : -1);
   }
 
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
@@ -205,11 +216,12 @@ export function pushFromTop(grid, topPending, cfg = DEFAULT_CFG) {
 export function collapseGrid(grid, cfg = DEFAULT_CFG) {
   const { ROWS, COLS, CENTER_COL } = cfg;
   const newGrid = grid.map(row => [...row]);
-  const allMoves = [];
+  const gravityMoves = [];
+  const horizontalMoves = [];
 
+  // Phase 1: gravity (downward) to stability — always runs before horizontal
   while (true) {
     const moves = [];
-
     for (let c = 0; c < COLS; c++) {
       const tiles = [];
       for (let r = 0; r < ROWS; r++) {
@@ -228,7 +240,16 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG) {
         dest--;
       }
     }
+    gravityMoves.push(...moves);
+    if (moves.length === 0) break;
+  }
 
+  // Snapshot after gravity, before horizontal — needed for staged animation
+  const midGrid = newGrid.map(row => [...row]);
+
+  // Phase 2: horizontal (inward) to stability — runs only after gravity is settled
+  while (true) {
+    const moves = [];
     for (let r = 0; r < ROWS; r++) {
       const rowSnapshot = [...newGrid[r]];
 
@@ -270,12 +291,52 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG) {
         }
       }
     }
-
-    allMoves.push(...moves);
+    horizontalMoves.push(...moves);
     if (moves.length === 0) break;
   }
 
-  return { grid: newGrid, moves: allMoves };
+  return { grid: newGrid, midGrid, gravityMoves, horizontalMoves };
+}
+
+export function annihilateAdjacent(grid, cfg = DEFAULT_CFG) {
+  const { ROWS, COLS } = cfg;
+  const visited = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+  const toAnnihilate = [];
+  let score = 0;
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (visited[r][c] || grid[r][c] === 0) continue;
+
+      const value = grid[r][c];
+      const group = [];
+      const queue = [[r, c]];
+      visited[r][c] = true;
+
+      while (queue.length > 0) {
+        const [cr, cc] = queue.shift();
+        group.push([cr, cc]);
+        for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nr = cr + dr, nc = cc + dc;
+          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !visited[nr][nc] && grid[nr][nc] === value) {
+            visited[nr][nc] = true;
+            queue.push([nr, nc]);
+          }
+        }
+      }
+
+      if (group.length >= 2) {
+        toAnnihilate.push(...group);
+        score += group.length * value;
+      }
+    }
+  }
+
+  if (toAnnihilate.length === 0) return { grid, annihilatedCells: [], score: 0 };
+
+  const newGrid = grid.map(row => [...row]);
+  for (const [r, c] of toAnnihilate) newGrid[r][c] = 0;
+  return { grid: newGrid, annihilatedCells: toAnnihilate, score };
 }
 
 export function isDeadCell(r, c) {
@@ -285,16 +346,16 @@ export function isDeadCell(r, c) {
 export function getTileColor(value) {
   const colors = {
     0:  { bg: '#1e1e38', text: 'transparent' },
-    1:  { bg: '#3a7bd5', text: '#fff' },
-    2:  { bg: '#2ecc71', text: '#fff' },
-    3:  { bg: '#f0c030', text: '#222' },
-    4:  { bg: '#e67e22', text: '#fff' },
-    5:  { bg: '#e74c3c', text: '#fff' },
-    6:  { bg: '#9b59b6', text: '#fff' },
-    7:  { bg: '#e91e8c', text: '#fff' },
-    8:  { bg: '#ff6b35', text: '#fff' },
-    9:  { bg: '#c0392b', text: '#fff' },
-    10: { bg: '#1abc9c', text: '#fff' },
+    1:  { bg: '#4488ee', text: '#fff' },  // blue
+    2:  { bg: '#22bbaa', text: '#fff' },  // teal
+    3:  { bg: '#44cc66', text: '#fff' },  // green
+    4:  { bg: '#99cc22', text: '#fff' },  // yellow-green
+    5:  { bg: '#ffcc00', text: '#222' },  // yellow
+    6:  { bg: '#ff8822', text: '#fff' },  // orange
+    7:  { bg: '#ff4422', text: '#fff' },  // red-orange
+    8:  { bg: '#dd1144', text: '#fff' },  // red
+    9:  { bg: '#cc1188', text: '#fff' },  // magenta
+    10: { bg: '#8822cc', text: '#fff' },  // purple
   };
   return colors[value] ?? { bg: '#fff', text: '#333' };
 }

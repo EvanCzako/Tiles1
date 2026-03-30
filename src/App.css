@@ -15,6 +15,7 @@ html, body {
   align-items: center;
   gap: 12px;
   padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
   touch-action: none;
   user-select: none;
   height: 100dvh;
@@ -51,6 +52,34 @@ html, body {
   color: #8888aa;
   font-size: 0.8rem;
   margin: 0;
+}
+
+.grid-mode-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  background: #1e1e38;
+  color: #8888aa;
+  border: 1px solid #3a3a6a;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mode-btn:hover {
+  background: #2a2a50;
+  color: #c0c0ee;
+}
+
+.mode-btn.active {
+  background: #3a7bd5;
+  color: #fff;
+  border-color: #3a7bd5;
 }
 
 .arena {
@@ -163,7 +192,18 @@ html, body {
   background: #4e8fe8;
 }
 
-@keyframes flash-blocked {
+@keyframes flash-annihilate {
+  0%   { filter: brightness(1);   opacity: 1; }
+  20%  { filter: brightness(3) saturate(0); opacity: 1; }
+  60%  { filter: brightness(2) saturate(0); opacity: 0.7; }
+  100% { filter: brightness(3) saturate(0); opacity: 0; }
+}
+
+.tile--flash-annihilate {
+  animation: flash-annihilate 320ms ease-in forwards;
+  z-index: 10;
+  position: relative;
+}
   0%   { filter: brightness(1); }
   25%  { filter: sepia(1) saturate(10) hue-rotate(310deg) brightness(1.5); }
   65%  { filter: sepia(1) saturate(6)  hue-rotate(310deg) brightness(1.2); }

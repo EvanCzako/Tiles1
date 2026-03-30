@@ -1,9 +1,6 @@
 import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react'
-import useGameStore, {
-  CONTAINER_W, CONTAINER_H, CELL, GAP, ANIM_MS,
-  sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft,
-} from './store'
-import { PENDING_ROW_START, isDeadCell, getTileColor } from './gameLogic'
+import useGameStore, { CELL, GAP, ANIM_MS } from './store'
+import { isDeadCell, getTileColor } from './gameLogic'
 import './App.css'
 
 // Vertical space consumed by title + score + hint + gaps + app padding in portrait/desktop.
@@ -52,13 +49,13 @@ function FlyingTile({ value, fromX, fromY, toX, toY, flyThrough = false }) {
 }
 
 // ── Static Tile ─────────────────────────────────────────────────────────────
-function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled = false }) {
+function Tile({ value, size = CELL, flashing = false, flashRed = false, flashAnnihilate = false, disabled = false }) {
   const { bg, text } = disabled
     ? { bg: '#4a1c1c', text: '#c06060' }
     : getTileColor(value);
   return (
     <div
-      className={`tile${value > 0 && !disabled ? ' tile--filled' : ''}${flashing ? ' tile--flash' : ''}${flashRed ? ' tile--flash-red' : ''}${disabled ? ' tile--disabled' : ''}`}
+      className={`tile${value > 0 && !disabled ? ' tile--filled' : ''}${flashing ? ' tile--flash' : ''}${flashRed ? ' tile--flash-red' : ''}${flashAnnihilate ? ' tile--flash-annihilate' : ''}${disabled ? ' tile--disabled' : ''}`}
       style={{ width: size, height: size, background: bg, color: text, fontSize: size * 0.35 }}
     >
       {value > 0 && !disabled ? value : ''}
@@ -67,37 +64,48 @@ function Tile({ value, size = CELL, flashing = false, flashRed = false, disabled
 }
 
 // ── Scale calculation (pure — no DOM measurement) ───────────────────────────
-function computeScale() {
+function computeScale(containerW, containerH) {
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
   // Small landscape = phone on its side (not a tablet)
   const smallLandscape = vw > vh && vh <= 500;
   const availW = vw - 32 - (smallLandscape ? LANDSCAPE_PANEL_W * 2 : 0);
   const availH = vh - (smallLandscape ? 32 : HEADER_H);
-  return Math.max(0.28, Math.min(1, availW / CONTAINER_W, availH / CONTAINER_H));
+  return Math.max(0.28, Math.min(1, availW / containerW, availH / containerH));
 }
 
 // ── App ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const {
     grid, leftPending, rightPending, topPending,
-    score, gameOver,
+    score, gameOver, animating, frozenPendingRows,
     flyingTiles, flyingSource,
-    flashSet, redFlashSet, redFlashSource,
+    flashSet, redFlashSet, redFlashSource, annihilateSet,
     collapsingCells, disabledLeft, disabledRight, disabledTop,
-    triggerPush, reset,
+    triggerPush, reset, cfg, layout,
   } = useGameStore();
 
+  const { sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft,
+          CONTAINER_W, CONTAINER_H } = layout;
+  const { PENDING_ROW_START } = cfg;
+
   const [scale, setScale] = useState(() =>
-    typeof document === 'undefined' ? 1 : computeScale()
+    typeof document === 'undefined' ? 1 : computeScale(CONTAINER_W, CONTAINER_H)
   );
 
   const touchStart = useRef(null);
+  const layoutRef  = useRef(layout);
+  layoutRef.current = layout;
 
-  // ── Responsive scale ───────────────────────────────────────────────────────
+  // ── Scale update when grid mode changes ────────────────────────────────────────
+  useEffect(() => {
+    setScale(computeScale(CONTAINER_W, CONTAINER_H));
+  }, [CONTAINER_W, CONTAINER_H]);
+
+  // ── Responsive scale ─────────────────────────────────────────────────────────
   useLayoutEffect(() => {
     let rafId = null;
-    const update = () => setScale(computeScale());
+    const update = () => setScale(computeScale(layoutRef.current.CONTAINER_W, layoutRef.current.CONTAINER_H));
     const defer  = () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(update); };
 
     const ro = new ResizeObserver(defer);
@@ -201,7 +209,7 @@ export default function App() {
             {/* Left pending */}
             <div className="pending-col" style={{ left: 0, top: pendingColTop }}>
               {leftPending.map((val, i) => {
-                const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+                const rowActive  = frozenPendingRows ? frozenPendingRows.left[i] : grid[PENDING_ROW_START + i].some(v => v !== 0);
                 const isDisabled = disabledLeft.has(i);
                 const isBlocked  = redFlashSource === 'leftPending' && redFlashSet.has(i);
                 return rowActive
@@ -210,12 +218,12 @@ export default function App() {
                       flashRed={isBlocked}
                       disabled={isDisabled}
                     />
-                  : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
+                  : <Tile key={i} value={0} />;
               })}
             </div>
 
             {/* Grid */}
-            <div className="grid" style={{ left: sideOffset, top: gridTopOffset, width: gridPx }}>
+            <div className="grid" style={{ left: sideOffset, top: gridTopOffset, width: gridPx, gridTemplateColumns: `repeat(${cfg.COLS}, ${CELL}px)` }}>
               {grid.map((row, r) =>
                 row.map((val, c) => (
                   isDeadCell(r, c)
@@ -224,6 +232,7 @@ export default function App() {
                         key={`${r}-${c}`}
                         value={collapsingCells.has(`${r},${c}`) ? 0 : val}
                         flashing={flashSet.has(`${r},${c}`)}
+                        flashAnnihilate={annihilateSet.has(`${r},${c}`)}
                       />
                 ))
               )}
@@ -232,7 +241,7 @@ export default function App() {
             {/* Right pending */}
             <div className="pending-col" style={{ left: sideOffset + gridPx + GAP * 4, top: pendingColTop }}>
               {rightPending.map((val, i) => {
-                const rowActive  = grid[PENDING_ROW_START + i].some(v => v !== 0);
+                const rowActive  = frozenPendingRows ? frozenPendingRows.right[i] : grid[PENDING_ROW_START + i].some(v => v !== 0);
                 const isDisabled = disabledRight.has(i);
                 const isBlocked  = redFlashSource === 'rightPending' && redFlashSet.has(i);
                 return rowActive
@@ -241,7 +250,7 @@ export default function App() {
                       flashRed={isBlocked}
                       disabled={isDisabled}
                     />
-                  : <div key={i} className="tile tile--dead" style={{ width: CELL, height: CELL }} />;
+                  : <Tile key={i} value={0} />;
               })}
             </div>
 
