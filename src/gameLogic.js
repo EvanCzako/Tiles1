@@ -275,7 +275,7 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
           }
         }
 
-        // Right side packs left but stays right of left tiles
+        // Right side packs left but stays right of left tiles (never goes below CENTER_COL + 1)
         {
           const tiles = [];
           for (let c = CENTER_COL + 1; c < COLS; c++) {
@@ -286,8 +286,10 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
             for (let c = CENTER_COL; c >= 0; c--) {
               if (newGrid[r][c] !== 0) { rightmostLeftTile = c; break; }
             }
-            // If no left tiles exist, pack toward center; otherwise pack right of left tiles
-            const destStart = rightmostLeftTile === -1 ? CENTER_COL + 1 - tiles.length : rightmostLeftTile + 1;
+            // Right side tiles always stay at CENTER_COL + 1 or right, never fill gaps on left
+            // Also clamp to not overhang the right edge
+            let destStart = Math.max(CENTER_COL + 1, rightmostLeftTile + 1);
+            destStart = Math.min(destStart, COLS - tiles.length);
             const already = tiles.every((t, i) => t.c === destStart + i);
             if (!already) {
               for (let c = CENTER_COL + 1; c < COLS; c++) newGrid[r][c] = 0;
@@ -321,7 +323,7 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
           }
         }
 
-        // Left side packs right but stays left of right tiles
+        // Left side packs right but stays left of right tiles (never goes above CENTER_COL)
         {
           const tiles = [];
           for (let c = 0; c < CENTER_COL; c++) {
@@ -332,8 +334,10 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
             for (let c = CENTER_COL; c < COLS; c++) {
               if (newGrid[r][c] !== 0) { leftmostRightTile = c; break; }
             }
-            // If no right tiles exist, pack toward center; otherwise pack left of right tiles
-            const destEnd = leftmostRightTile === COLS ? CENTER_COL : leftmostRightTile - 1;
+            // Left side tiles always stay at CENTER_COL or left, never fill gaps on right
+            // Also clamp to not go below column 0
+            let destEnd = Math.min(CENTER_COL, leftmostRightTile - 1);
+            destEnd = Math.max(destEnd, tiles.length - 1);
             const already = tiles.every((t, i) => t.c === destEnd - tiles.length + 1 + i);
             if (!already) {
               for (let c = 0; c < CENTER_COL; c++) newGrid[r][c] = 0;
