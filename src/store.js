@@ -62,9 +62,9 @@ function initState(mode = '9x9') {
 }
 
 // ── Collapse + annihilate loop ─────────────────────────────────────────────
-function runCollapseLoop(grid, pendingPayload, newDL, newDR, newDT, get, set) {
+function runCollapseLoop(grid, pendingPayload, newDL, newDR, newDT, get, set, lastPushedSide = 'left') {
   const { cfg } = get();
-  const { grid: collapsedGrid, midGrid, gravityMoves, horizontalMoves } = collapseGrid(grid, cfg);
+  const { grid: collapsedGrid, midGrid, gravityMoves, horizontalMoves } = collapseGrid(grid, cfg, lastPushedSide);
 
   const afterCollapse = (settled) => {
     const curCfg = get().cfg;
@@ -90,7 +90,7 @@ function runCollapseLoop(grid, pendingPayload, newDL, newDR, newDT, get, set) {
     });
     setTimeout(() => {
       set({ grid: annGrid, annihilateSet: new Set() });
-      runCollapseLoop(annGrid, pendingPayload, newDL, newDR, newDT, get, set);
+      runCollapseLoop(annGrid, pendingPayload, newDL, newDR, newDT, get, set, lastPushedSide);
     }, FLASH_MS);
   };
 
@@ -217,8 +217,8 @@ const useGameStore = create((set, get) => ({
         let to, flyThrough;
         if (land.flyThrough) {
           flyThrough = true;
-          if (pendingKey === 'leftPending')       to = { x: layout.CONTAINER_W + CELL, y: from.y };
-          else if (pendingKey === 'rightPending') to = { x: -CELL * 2,                  y: from.y };
+          if (pendingKey === 'leftPending')       to = { x: layout.sideOffset + layout.gridPx + GAP * 4 + CELL, y: from.y };
+          else if (pendingKey === 'rightPending') to = { x: -CELL * 2,                                            y: from.y };
           else                                    to = { x: from.x, y: layout.CONTAINER_H + CELL };
         } else {
           flyThrough = false;
@@ -295,7 +295,10 @@ const useGameStore = create((set, get) => ({
       // Commit the grid + intermediate pending (used slots zeroed); hold refreshed pending for cascade end
       const { grid: payloadGrid, ...pendingPayload } = payload;
       set({ grid: payloadGrid, [pendingKey]: intermediatePending });
-      runCollapseLoop(payloadGrid, pendingPayload, newDL, newDR, newDT, get, set);
+      
+      // Determine which side was pushed to inform collapse logic
+      const lastPushedSide = pKey === 'leftPending' ? 'left' : pKey === 'rightPending' ? 'right' : 'top';
+      runCollapseLoop(payloadGrid, pendingPayload, newDL, newDR, newDT, get, set, lastPushedSide);
     }, ANIM_MS + 30);
   },
 }));

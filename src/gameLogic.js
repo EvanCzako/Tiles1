@@ -213,7 +213,7 @@ export function pushFromTop(grid, topPending, cfg = DEFAULT_CFG) {
   return { grid: newGrid, pending: newPending, mergedCells, landings, blockedIndices, score };
 }
 
-export function collapseGrid(grid, cfg = DEFAULT_CFG) {
+export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
   const { ROWS, COLS, CENTER_COL } = cfg;
   const newGrid = grid.map(row => [...row]);
   const gravityMoves = [];
@@ -248,44 +248,101 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG) {
   const midGrid = newGrid.map(row => [...row]);
 
   // Phase 2: horizontal (inward) to stability — runs only after gravity is settled
+  // The most recently pushed side gets priority for the center column
   while (true) {
     const moves = [];
     for (let r = 0; r < ROWS; r++) {
       const rowSnapshot = [...newGrid[r]];
 
-      {
-        const tiles = [];
-        for (let c = 0; c < CENTER_COL; c++) {
-          if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
-        }
-        if (tiles.length > 0) {
-          const already = tiles.every((t, i) => t.c === CENTER_COL - tiles.length + i);
-          if (!already) {
-            for (let c = 0; c < CENTER_COL; c++) newGrid[r][c] = 0;
-            let dest = CENTER_COL - tiles.length;
-            for (const { c: from, v } of tiles) {
-              newGrid[r][dest] = v;
-              if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
-              dest++;
+      if (lastPushedSide === 'left') {
+        // Left side pushes right toward the center and can occupy CENTER_COL
+        {
+          const tiles = [];
+          for (let c = 0; c <= CENTER_COL; c++) {
+            if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
+          }
+          if (tiles.length > 0) {
+            const already = tiles.every((t, i) => t.c === CENTER_COL + 1 - tiles.length + i);
+            if (!already) {
+              for (let c = 0; c <= CENTER_COL; c++) newGrid[r][c] = 0;
+              let dest = CENTER_COL + 1 - tiles.length;
+              for (const { c: from, v } of tiles) {
+                newGrid[r][dest] = v;
+                if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+                dest++;
+              }
             }
           }
         }
-      }
 
-      {
-        const tiles = [];
-        for (let c = CENTER_COL; c < COLS; c++) {
-          if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
+        // Right side packs left but stays right of left tiles
+        {
+          const tiles = [];
+          for (let c = CENTER_COL + 1; c < COLS; c++) {
+            if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
+          }
+          if (tiles.length > 0) {
+            let rightmostLeftTile = -1;
+            for (let c = CENTER_COL; c >= 0; c--) {
+              if (newGrid[r][c] !== 0) { rightmostLeftTile = c; break; }
+            }
+            // If no left tiles exist, pack toward center; otherwise pack right of left tiles
+            const destStart = rightmostLeftTile === -1 ? CENTER_COL + 1 - tiles.length : rightmostLeftTile + 1;
+            const already = tiles.every((t, i) => t.c === destStart + i);
+            if (!already) {
+              for (let c = CENTER_COL + 1; c < COLS; c++) newGrid[r][c] = 0;
+              let dest = destStart;
+              for (const { c: from, v } of tiles) {
+                newGrid[r][dest] = v;
+                if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+                dest++;
+              }
+            }
+          }
         }
-        if (tiles.length > 0) {
-          const already = tiles.every((t, i) => t.c === CENTER_COL + i);
-          if (!already) {
-            for (let c = CENTER_COL; c < COLS; c++) newGrid[r][c] = 0;
-            let dest = CENTER_COL;
-            for (const { c: from, v } of tiles) {
-              newGrid[r][dest] = v;
-              if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
-              dest++;
+      } else {
+        // Right side pushes left toward the center and can occupy CENTER_COL
+        {
+          const tiles = [];
+          for (let c = CENTER_COL; c < COLS; c++) {
+            if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
+          }
+          if (tiles.length > 0) {
+            const already = tiles.every((t, i) => t.c === CENTER_COL + i);
+            if (!already) {
+              for (let c = CENTER_COL; c < COLS; c++) newGrid[r][c] = 0;
+              let dest = CENTER_COL;
+              for (const { c: from, v } of tiles) {
+                newGrid[r][dest] = v;
+                if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+                dest++;
+              }
+            }
+          }
+        }
+
+        // Left side packs right but stays left of right tiles
+        {
+          const tiles = [];
+          for (let c = 0; c < CENTER_COL; c++) {
+            if (rowSnapshot[c] !== 0) tiles.push({ c, v: rowSnapshot[c] });
+          }
+          if (tiles.length > 0) {
+            let leftmostRightTile = COLS;
+            for (let c = CENTER_COL; c < COLS; c++) {
+              if (newGrid[r][c] !== 0) { leftmostRightTile = c; break; }
+            }
+            // If no right tiles exist, pack toward center; otherwise pack left of right tiles
+            const destEnd = leftmostRightTile === COLS ? CENTER_COL : leftmostRightTile - 1;
+            const already = tiles.every((t, i) => t.c === destEnd - tiles.length + 1 + i);
+            if (!already) {
+              for (let c = 0; c < CENTER_COL; c++) newGrid[r][c] = 0;
+              let dest = destEnd - tiles.length + 1;
+              for (const { c: from, v } of tiles) {
+                newGrid[r][dest] = v;
+                if (from !== dest) moves.push({ value: v, fromRow: r, fromCol: from, toRow: r, toCol: dest });
+                dest++;
+              }
             }
           }
         }
