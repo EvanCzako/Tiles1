@@ -16,8 +16,8 @@ export default function App() {
     <div className="app">
       <GameHeader score={score} />
       <div className="arena-container">
-        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, maxWidth: '100%' }}>
-          <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0 }}>
+          <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
             <Arena />
           </div>
         </div>

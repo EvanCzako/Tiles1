@@ -222,8 +222,8 @@ html, body {
   display: none;
 }
 
-/* ── Small landscape (phone on its side) ──────────────────────────────────── */
-@media (orientation: landscape) and (max-height: 500px) {
+/* ── Landscape ────────────────────────────────────────────────────────────── */
+@media (orientation: landscape) {
   .app {
     flex-direction: row;
     align-items: center;

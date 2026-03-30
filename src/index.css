@@ -20,9 +20,3 @@ body {
   flex-direction: column;
   align-items: center;
 }
-
-@media (max-width: 540px) {
-  body {
-    align-items: flex-start;
-  }
-}
