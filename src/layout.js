@@ -3,14 +3,14 @@ import { CELL, GAP } from './constants';
 // ── Layout computed from cfg ──────────────────────────────────────────────────
 export function getLayout(cfg) {
   const { ROWS, COLS, PENDING_SIZE, PENDING_COL_START } = cfg;
-  const sideOffset     = CELL + GAP * 4;
+  const sideOffset     = CELL;
   const gridPx         = COLS * CELL + (COLS - 1) * GAP;
   const gridTopOffset  = CELL + GAP * 4;
   const gridBottom     = gridTopOffset + ROWS * (CELL + GAP) - GAP;
   const pendingColTop  = gridBottom - PENDING_SIZE * (CELL + GAP) + GAP;
   const topPendingLeft = PENDING_COL_START * (CELL + GAP);
   const CONTAINER_H    = gridTopOffset + ROWS * (CELL + GAP);
-  const CONTAINER_W    = gridPx + 2 * (CELL + GAP * 4);
+  const CONTAINER_W    = gridPx + 2 * CELL + GAP * 4;
   return { sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft, CONTAINER_H, CONTAINER_W };
 }
 
