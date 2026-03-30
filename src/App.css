@@ -233,6 +233,7 @@ html, body {
     flex-direction: row;
     align-items: center;
     gap: 0;
+    padding-top: max(env(safe-area-inset-top), 16px);
   }
 
   .game-header {

@@ -267,7 +267,14 @@ const useGameStore = create((set, get) => ({
       });
       if (blockedIndices.length > 0)
         setTimeout(() => set({ redFlashSet: new Set(), redFlashSource: null }), FLASH_MS);
-      if (checkGameOver(pc.payload.grid, newDL, newDR, newDT, cfg)) set({ gameOver: true });
+      if (checkGameOver(pc.payload.grid, newDL, newDR, newDT, cfg)) {
+        set({ gameOver: true });
+      } else {
+        const available = getAvailableDirections(get());
+        if (available.length === 1) {
+          setTimeout(() => { if (!get().gameOver && !get().animating) get().triggerPush(available[0]); }, AUTO_MOVE_MS);
+        }
+      }
       return;
     }
 

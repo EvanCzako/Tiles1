@@ -65,8 +65,8 @@ function Tile({ value, size = CELL, flashing = false, flashRed = false, flashAnn
 
 // ── Scale calculation (pure — no DOM measurement) ───────────────────────────
 function computeScale(containerW, containerH) {
-  const vw = document.documentElement.clientWidth;
-  const vh = document.documentElement.clientHeight;
+  const vw = window.visualViewport?.width  ?? document.documentElement.clientWidth;
+  const vh = window.visualViewport?.height ?? document.documentElement.clientHeight;
   // Small landscape = phone on its side (not a tablet)
   const smallLandscape = vw > vh && vh <= 500;
   const availW = vw - 32 - (smallLandscape ? LANDSCAPE_PANEL_W * 2 : 0);
@@ -108,17 +108,26 @@ export default function App() {
     const update = () => setScale(computeScale(layoutRef.current.CONTAINER_W, layoutRef.current.CONTAINER_H));
     const defer  = () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(update); };
 
+    let orientationTimer = null;
+    const onOrientation = () => {
+      clearTimeout(orientationTimer);
+      orientationTimer = setTimeout(update, 150);
+    };
+
     const ro = new ResizeObserver(defer);
     ro.observe(document.documentElement);
     window.addEventListener('resize', defer);
     window.visualViewport?.addEventListener('resize', defer);
+    window.addEventListener('orientationchange', onOrientation);
     update();
 
     return () => {
       cancelAnimationFrame(rafId);
+      clearTimeout(orientationTimer);
       ro.disconnect();
       window.removeEventListener('resize', defer);
       window.visualViewport?.removeEventListener('resize', defer);
+      window.removeEventListener('orientationchange', onOrientation);
     };
   }, []);
 
