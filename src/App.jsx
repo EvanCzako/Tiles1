@@ -105,7 +105,11 @@ export default function App() {
   // ── Responsive scale ─────────────────────────────────────────────────────────
   useLayoutEffect(() => {
     let rafId = null;
-    const update = () => setScale(computeScale(layoutRef.current.CONTAINER_W, layoutRef.current.CONTAINER_H));
+    const update = () => {
+      const vh = window.visualViewport?.height ?? document.documentElement.clientHeight;
+      document.documentElement.style.setProperty('--app-h', `${vh}px`);
+      setScale(computeScale(layoutRef.current.CONTAINER_W, layoutRef.current.CONTAINER_H));
+    };
     const defer  = () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(update); };
 
     let orientationTimer = null;
@@ -177,8 +181,8 @@ export default function App() {
         </p>
       </div>
       <div className="arena-container">
-        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, maxWidth: '100%' }}>
-          <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        <div style={{ width: CONTAINER_W * scale, height: CONTAINER_H * scale, overflow: 'hidden', flexShrink: 0, maxWidth: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+          <div className="arena" style={{ width: CONTAINER_W, height: CONTAINER_H, transform: `scale(${scale})`, transformOrigin: 'top center', flexShrink: 0 }}>
 
             {gameOver && (
               <div className="game-over-overlay">

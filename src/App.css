@@ -18,7 +18,7 @@ html, body {
   padding-top: max(56px, env(safe-area-inset-top));
   touch-action: none;
   user-select: none;
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   width: 100%;
   overflow: hidden;
 }
