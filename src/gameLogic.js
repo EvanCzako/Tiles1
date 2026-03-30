@@ -356,6 +356,68 @@ export function collapseGrid(grid, cfg = DEFAULT_CFG, lastPushedSide = 'left') {
     if (moves.length === 0) break;
   }
 
+  // Post-processing: ensure if a row has live tiles, CENTER_COL is filled
+  for (let r = 0; r < ROWS; r++) {
+    const hasLive = newGrid[r].some(v => v !== 0);
+    if (!hasLive) continue;
+    
+    if (newGrid[r][CENTER_COL] !== 0) continue; // Already filled
+    
+    // Find leftmost and rightmost tiles in the row
+    let leftmost = -1, rightmost = -1;
+    for (let c = 0; c < COLS; c++) {
+      if (newGrid[r][c] !== 0) {
+        if (leftmost === -1) leftmost = c;
+        rightmost = c;
+      }
+    }
+    
+    // If all tiles are on the left, slide right to fill CENTER_COL
+    if (rightmost < CENTER_COL) {
+      const tiles = [];
+      const fromCols = [];
+      for (let c = leftmost; c <= rightmost; c++) {
+        if (newGrid[r][c] !== 0) {
+          tiles.push(newGrid[r][c]);
+          fromCols.push(c);
+        }
+        newGrid[r][c] = 0;
+      }
+      let dest = CENTER_COL + 1 - tiles.length;
+      for (let i = 0; i < tiles.length; i++) {
+        const v = tiles[i];
+        const fromCol = fromCols[i];
+        newGrid[r][dest] = v;
+        if (fromCol !== dest) {
+          horizontalMoves.push({ value: v, fromRow: r, fromCol, toRow: r, toCol: dest });
+        }
+        dest++;
+      }
+    }
+    // If all tiles are on the right, slide left to fill CENTER_COL
+    else if (leftmost > CENTER_COL) {
+      const tiles = [];
+      const fromCols = [];
+      for (let c = leftmost; c <= rightmost; c++) {
+        if (newGrid[r][c] !== 0) {
+          tiles.push(newGrid[r][c]);
+          fromCols.push(c);
+        }
+        newGrid[r][c] = 0;
+      }
+      let dest = CENTER_COL;
+      for (let i = 0; i < tiles.length; i++) {
+        const v = tiles[i];
+        const fromCol = fromCols[i];
+        newGrid[r][dest] = v;
+        if (fromCol !== dest) {
+          horizontalMoves.push({ value: v, fromRow: r, fromCol, toRow: r, toCol: dest });
+        }
+        dest++;
+      }
+    }
+  }
+
   return { grid: newGrid, midGrid, gravityMoves, horizontalMoves };
 }
 
