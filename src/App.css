@@ -4,10 +4,6 @@ html, body {
   width: 100%;
 }
 
-* {
-  -webkit-tap-highlight-color: transparent;
-  box-sizing: border-box;
-}
 
 .app {
   display: flex;
@@ -18,7 +14,7 @@ html, body {
   padding-top: max(56px, env(safe-area-inset-top));
   touch-action: none;
   user-select: none;
-  height: var(--app-h, 100dvh);
+  height: var(--app-h, 100svh);
   width: 100%;
   overflow: hidden;
 }
@@ -89,7 +85,6 @@ html, body {
 .grid {
   position: absolute;
   display: grid;
-  grid-template-columns: repeat(10, 52px);
   gap: 4px;
   background: #16163a;
   border-radius: 6px;
