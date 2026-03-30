@@ -35,13 +35,13 @@ export function createInitialGrid(cfg = DEFAULT_CFG) {
 }
 
 function randTile() {
-  const r = Math.random() * 15.875;
-  if (r < 8) return 1;
-  if (r < 12) return 2;
-  if (r < 14) return 3;
-  if (r < 15) return 4;
-	if (r < 15.5) return 5;
-	if (r < 15.75) return 6
+  const r = Math.random() * 15.75;
+  if (r < 5) return 1;
+  if (r < 9) return 2;
+  if (r < 12) return 3;
+  if (r < 14) return 4;
+	if (r < 15) return 5;
+	if (r < 15.5) return 6
   return 7;
 }
 

@@ -4,7 +4,7 @@ import { isDeadCell, getTileColor } from './gameLogic'
 import './App.css'
 
 // Vertical space consumed by title + score + hint + gaps + app padding in portrait/desktop.
-const HEADER_H = 140;
+const HEADER_H = 180;
 // Width of the left label panel and right swipe zone in small landscape mode.
 const LANDSCAPE_PANEL_W = 100;
 
