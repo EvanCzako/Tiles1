@@ -32,6 +32,18 @@ function checkGameOver(grid, dl, dr, dt, cfg) {
   );
 }
 
+function loadHighScore() {
+  if (typeof window === 'undefined') return 0;
+  const saved = localStorage.getItem('tilesHighScore');
+  return saved ? parseInt(saved, 10) : 0;
+}
+
+function saveHighScore(score) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('tilesHighScore', String(score));
+  }
+}
+
 function initState(mode = '9x9') {
   const cfg    = GRID_CONFIGS[mode];
   const layout = getLayout(cfg);
@@ -44,6 +56,7 @@ function initState(mode = '9x9') {
     rightPending:   createInitialPending(cfg),
     topPending:     createInitialTopPending(cfg),
     score:          0,
+    highScore:      loadHighScore(),
     gameOver:       false,
     animating:      false,
     flyingTiles:    [],
@@ -74,7 +87,11 @@ function runCollapseLoop(grid, pendingPayload, newDL, newDR, newDT, get, set, la
       // Cascade fully settled — now reveal the refreshed pending tiles
       set({ animating: false, frozenPendingRows: null, ...pendingPayload });
       if (checkGameOver(settled, newDL, newDR, newDT, curCfg)) {
-        set({ gameOver: true });
+        const currentScore = get().score;
+        const currentHighScore = get().highScore;
+        const newHighScore = Math.max(currentScore, currentHighScore);
+        saveHighScore(newHighScore);
+        set({ gameOver: true, highScore: newHighScore });
       } else {
         const available = getAvailableDirections(get());
         if (available.length === 1) {
@@ -156,6 +173,11 @@ const useGameStore = create((set, get) => ({
 
   reset() {
     set(initState(get().gridMode));
+  },
+
+  resetHighScore() {
+    saveHighScore(0);
+    set({ highScore: 0 });
   },
 
   setGridMode(mode) {
@@ -244,7 +266,11 @@ const useGameStore = create((set, get) => ({
       if (blockedIndices.length > 0)
         setTimeout(() => set({ redFlashSet: new Set(), redFlashSource: null }), FLASH_MS);
       if (checkGameOver(pc.payload.grid, newDL, newDR, newDT, cfg)) {
-        set({ gameOver: true });
+        const currentScore = get().score + pushScore;
+        const currentHighScore = get().highScore;
+        const newHighScore = Math.max(currentScore, currentHighScore);
+        saveHighScore(newHighScore);
+        set({ gameOver: true, highScore: newHighScore });
       } else {
         const available = getAvailableDirections(get());
         if (available.length === 1) {

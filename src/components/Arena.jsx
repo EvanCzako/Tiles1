@@ -8,7 +8,7 @@ import GameOverOverlay from './GameOverOverlay';
 export default function Arena() {
   const {
     grid, leftPending, rightPending, topPending,
-    score, gameOver, reset,
+    score, highScore, gameOver, reset,
     flyingTiles, flyingSource,
     flashSet, redFlashSet, redFlashSource, annihilateSet,
     collapsingCells, disabledLeft, disabledRight, disabledTop,
@@ -16,11 +16,11 @@ export default function Arena() {
   } = useGameStore();
 
   const { sideOffset, gridPx, gridTopOffset, pendingColTop, topPendingLeft } = layout;
-  const { PENDING_ROW_START } = cfg;
+  const { PENDING_ROW_START, CENTER_COL } = cfg;
 
   return (
     <>
-      {gameOver && <GameOverOverlay score={score} onReset={reset} />}
+      {gameOver && <GameOverOverlay score={score} highScore={highScore} onReset={reset} />}
 
       {flyingTiles.map(ft => (
         <FlyingTile
@@ -67,14 +67,21 @@ export default function Arena() {
       <div className="grid" style={{ left: sideOffset, top: gridTopOffset, width: gridPx, gridTemplateColumns: `repeat(${cfg.COLS}, ${CELL}px)` }}>
         {grid.map((row, r) =>
           row.map((val, c) => (
-            isDeadCell(r, c)
-              ? <div key={`${r}-${c}`} className="tile tile--dead" style={{ width: CELL, height: CELL }} />
-              : <Tile
-                  key={`${r}-${c}`}
-                  value={collapsingCells.has(`${r},${c}`) ? 0 : val}
-                  flashing={flashSet.has(`${r},${c}`)}
-                  flashAnnihilate={annihilateSet.has(`${r},${c}`)}
-                />
+            <div 
+              key={`${r}-${c}`}
+              className={`grid-cell${c === CENTER_COL ? ' grid-cell--center' : ''}`}
+              style={{ width: CELL, height: CELL }}
+            >
+              {isDeadCell(r, c)
+                ? <div className="tile tile--dead" style={{ width: CELL, height: CELL }} />
+                : <Tile
+                    value={collapsingCells.has(`${r},${c}`) ? 0 : val}
+                    flashing={flashSet.has(`${r},${c}`)}
+                    flashAnnihilate={annihilateSet.has(`${r},${c}`)}
+                    centerColumn={c === CENTER_COL}
+                  />
+              }
+            </div>
           ))
         )}
       </div>

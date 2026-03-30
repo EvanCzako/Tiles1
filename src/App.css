@@ -36,11 +36,49 @@ html, body {
   margin: 0;
 }
 
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  justify-content: center;
+}
+
 .score {
   color: #a0a0cc;
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0;
+}
+
+.high-score {
+  color: #a0a0cc;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.reset-hs-btn {
+  background: none;
+  border: 1px solid #a0a0cc;
+  color: #a0a0cc;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.reset-hs-btn:hover {
+  background-color: rgba(160, 160, 204, 0.1);
+  border-color: #e0e0ff;
+  color: #e0e0ff;
 }
 
 .hint {
@@ -120,6 +158,15 @@ html, body {
 
 .tile--disabled {
   opacity: 0.4;
+}
+
+.grid-cell {
+  border-radius: 6px;
+}
+
+.grid-cell--center {
+  background: rgba(100, 120, 200, 0.15);
+  border-radius: 6px;
 }
 
 @keyframes flash-collapse {
